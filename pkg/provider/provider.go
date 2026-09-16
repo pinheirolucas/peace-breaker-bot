@@ -36,9 +36,8 @@ type Provider interface {
 	// downloading it.
 	AllowedContentHosts() []string
 
-	// SupportsRegion reports whether Region in ListParams does anything for
-	// this provider, so a provider picker can decide whether to show a
-	// region field at all.
+	// SupportsRegion reports whether Region does anything for this
+	// provider.
 	SupportsRegion() bool
 }
 

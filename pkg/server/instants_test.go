@@ -168,9 +168,6 @@ func TestHandleInstantContentAllowsAHostAnyRegisteredProviderAllows(t *testing.T
 	rec := httptest.NewRecorder()
 	s.handleInstantContent(rec, req)
 
-	// Not registered under provider "a" specifically, but still allowed
-	// since it's provider "b"'s host — the union of every provider, not
-	// just the one the URL happened to be listed under.
 	if got := decodeBody(t, rec)["label"]; got == "invalid_url" {
 		t.Errorf("a host allowed by a different registered provider was rejected")
 	}
@@ -210,8 +207,6 @@ func TestHandleListProvidersListsEveryRegisteredProviderSortedByKey(t *testing.T
 	}
 }
 
-// A smoke test against the real, unswapped registry — guards every real
-// provider actually being registered and reachable through the endpoint.
 func TestHandleListProvidersIncludesEveryRealProvider(t *testing.T) {
 	s := New(instant.NewPlayer(), connectedBotStatus())
 

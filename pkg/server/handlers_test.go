@@ -20,9 +20,6 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
 )
 
-// serverAllowingHost builds a Server whose only registered provider allows
-// content from host, so a content-fetch test can use an arbitrary/test
-// upstream without needing it to be one of the real providers' hosts.
 func serverAllowingHost(host string) *Server {
 	return &Server{
 		player:   instant.NewPlayer(),

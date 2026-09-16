@@ -201,10 +201,6 @@ func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, out)
 }
 
-// allowedContentHosts unions every registered provider's
-// AllowedContentHosts, so handleInstantContent can validate a URL against
-// every provider at once rather than only the one it was originally listed
-// under.
 func (s *Server) allowedContentHosts() map[string]struct{} {
 	hosts := make(map[string]struct{})
 	for _, p := range s.providers() {
