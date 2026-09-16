@@ -14,6 +14,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/text/language"
 
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/httpclient"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/i18n"
@@ -26,8 +27,16 @@ const autodiscoveryServiceName = "_myinstants._tcp"
 // be the httpclient one: myinstants.com answers 403 to Go's default User-Agent.
 var defaultClient = httpclient.New()
 
+// BotStatus is the narrow slice of *bot.Bot the server needs — just enough
+// to gate POST /bot/play and answer GET /bot/status, without importing all
+// of pkg/bot.
+type BotStatus interface {
+	Status() bot.VoiceStatus
+}
+
 type Server struct {
 	player *instant.Player
+	bot    BotStatus
 
 	// myInstantsBaseURL and client let tests point the scrape at a fixture
 	// server; both fall back to the production values when unset.
@@ -35,8 +44,8 @@ type Server struct {
 	client            *http.Client
 }
 
-func New(player *instant.Player) *Server {
-	return &Server{player: player}
+func New(player *instant.Player, bot BotStatus) *Server {
+	return &Server{player: player, bot: bot}
 }
 
 func (s *Server) baseURL() string {
@@ -60,6 +69,7 @@ func (s *Server) Start(address string) error {
 
 	r.HandleFunc("POST /api/v1/bot/play", s.handleBotPlay)
 	r.HandleFunc("POST /api/v1/bot/stop", s.handleBotStop)
+	r.HandleFunc("GET /api/v1/bot/status", s.handleBotStatus)
 	r.HandleFunc("GET /api/v1/instants", s.handleListInstants)
 	r.HandleFunc("GET /api/v1/instants/{url}/content", s.handleInstantContent)
 	r.HandleFunc("GET /api/v1/openapi.yaml", s.handleOpenAPISpec)
@@ -145,6 +155,11 @@ func (s *Server) handleBotPlay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.bot.Status().Connected {
+		writeErrorMessage(w, http.StatusConflict, lang, "bot_not_connected")
+		return
+	}
+
 	exitReason, err := s.player.Play(in.URL)
 	switch err {
 	case nil:
@@ -168,6 +183,29 @@ func (s *Server) handleBotPlay(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBotStop(w http.ResponseWriter, r *http.Request) {
 	s.player.Stop()
+}
+
+type botStatusResponse struct {
+	Connected   bool   `json:"connected"`
+	GuildID     string `json:"guildId,omitempty"`
+	GuildName   string `json:"guildName,omitempty"`
+	ChannelID   string `json:"channelId,omitempty"`
+	ChannelName string `json:"channelName,omitempty"`
+}
+
+// handleBotStatus reports whether the bot has an open voice connection, so
+// the UI can pre-emptively disable "send to Discord" instead of only
+// reacting to a failed POST /api/v1/bot/play. IDs are sent as strings —
+// Discord snowflakes overflow JS's safe integer range — and the name fields
+// are omitted entirely while disconnected, rather than sent empty.
+func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
+	status := s.bot.Status()
+	out := &botStatusResponse{Connected: status.Connected}
+	if status.Connected {
+		out.GuildID, out.GuildName = status.GuildID.String(), status.GuildName
+		out.ChannelID, out.ChannelName = status.ChannelID.String(), status.ChannelName
+	}
+	writeSuccessResponse(w, out)
 }
 
 func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {

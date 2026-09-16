@@ -12,6 +12,7 @@ var ptBR = map[string]string{
 	"bad_http_status":         "O site myinstants.com respondeu com um status de erro",
 	"name_link_not_matched":   "A quantidade de links e botões não coincide",
 	"unknown_error":           "Erro desconhecido, tente novamente mais tarde",
+	"bot_not_connected":       "O bot ainda não está em um canal de voz — use !join no canal que você quer.",
 
 	"bot.ping.help":   "Teste para verificar se o bot está online",
 	"bot.join.help":   "Chamar o bot para o canal de áudio em que você está",

@@ -83,6 +83,15 @@ paths:
               examples:
                 instantNotFound:
                   value: { label: instant_not_found, message: "That instant couldn't be found" }
+        "409":
+          description: The bot has no active voice connection — checked before the clip is resolved or played. See `GET /api/v1/bot/status`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                botNotConnected:
+                  value: { label: bot_not_connected, message: "The bot isn't in a voice channel yet — send !join from the channel you want it in." }
         "422":
           description: The downloaded file did not sniff as mp3.
           content:
@@ -113,6 +122,38 @@ paths:
       responses:
         "200":
           description: Empty body; no Content-Type is set. Always this status.
+
+  /api/v1/bot/status:
+    get:
+      operationId: botStatus
+      summary: Report the bot's current voice connection
+      description: |
+        Read-only, meant for polling: lets the UI pre-emptively disable
+        "send to Discord" instead of only reacting to a `409` from
+        `POST /api/v1/bot/play`. Guild/channel IDs are sent as strings —
+        Discord snowflakes overflow JS's safe integer range — and their
+        name fields are omitted entirely while disconnected, or when
+        connected but not found in cache, rather than sent as `""`.
+      responses:
+        "200":
+          description: Always this status; see `data.connected`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotStatusEnvelope"
+              examples:
+                connected:
+                  summary: The bot is in a voice channel
+                  value:
+                    data:
+                      connected: true
+                      guildId: "123456789012345678"
+                      guildName: "My Server"
+                      channelId: "234567890123456789"
+                      channelName: "General"
+                disconnected:
+                  summary: The bot has no active voice connection
+                  value: { data: { connected: false } }
 
   /api/v1/instants/{url}/content:
     get:
@@ -320,6 +361,31 @@ components:
                   type: string
                   enum: [end, stop]
                   description: end = playback finished naturally; stop = interrupted.
+
+    BotStatusEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [connected]
+              properties:
+                connected:
+                  type: boolean
+                guildId:
+                  type: string
+                  description: Present only when connected. A Discord snowflake, sent as a string.
+                guildName:
+                  type: string
+                  description: Present only when connected and resolved from cache.
+                channelId:
+                  type: string
+                  description: Present only when connected. A Discord snowflake, sent as a string.
+                channelName:
+                  type: string
+                  description: Present only when connected and resolved from cache.
 
     InstantContentSuccessEnvelope:
       allOf:

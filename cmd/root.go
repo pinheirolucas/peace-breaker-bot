@@ -92,7 +92,7 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	s := server.New(player)
+	s := server.New(player, b)
 
 	go func() {
 		if err := s.Start(address); err != nil {

@@ -12,6 +12,7 @@ var enUS = map[string]string{
 	"bad_http_status":         "myinstants.com answered with an error",
 	"name_link_not_matched":   "myinstants.com's results couldn't be read — their page layout may have changed",
 	"unknown_error":           "Something went wrong. Try again in a moment",
+	"bot_not_connected":       "The bot isn't in a voice channel yet — send !join from the channel you want it in.",
 
 	"bot.ping.help":   "Checks whether the bot is online",
 	"bot.join.help":   "Calls the bot into the voice channel you're in",
