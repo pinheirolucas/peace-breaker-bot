@@ -6,9 +6,10 @@ var enUS = map[string]string{
 	"instant_not_found":       "That instant couldn't be found",
 	"unsuported_audio_format": "That instant isn't an audio format we can play",
 	"invalid_region":          "That region code isn't valid",
-	"http_request":            "Couldn't reach myinstants.com",
-	"bad_http_status":         "myinstants.com answered with an error",
-	"name_link_not_matched":   "myinstants.com's results couldn't be read — their page layout may have changed",
+	"provider_not_found":      "That provider isn't recognized",
+	"http_request":            "Couldn't reach that provider's site",
+	"bad_http_status":         "That provider's site answered with an error",
+	"name_link_not_matched":   "That provider's results couldn't be read — its page layout may have changed",
 	"unknown_error":           "Something went wrong. Try again in a moment",
 	"bot_not_connected":       "The bot isn't in a voice channel yet — send !join from the channel you want it in.",
 
