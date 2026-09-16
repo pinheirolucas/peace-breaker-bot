@@ -25,9 +25,6 @@ func fixture(t *testing.T, name string) string {
 }
 
 func TestUnescapeJSStringDecodesUnicodeEscapesAndDoubledSlashes(t *testing.T) {
-	// What the site actually sends: json_encode's default \/ escaping,
-	// further escaped once more for embedding in a single-quoted JS string,
-	// plus \uXXXX in place of literal double quotes.
 	in := `{"title":"Boom","url":"https:\\\/\\\/cdn.soundbuttons.io\\\/a.mp3"}`
 
 	got := unescapeJSString(in)

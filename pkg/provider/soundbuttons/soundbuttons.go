@@ -27,8 +27,6 @@ const (
 var (
 	defaultClient = httpclient.New()
 
-	// Matches the JSON.parse('...') argument inside an
-	// article.sc's @click Alpine.js attribute.
 	clickPayloadPattern = regexp.MustCompile(`\$store\.player\.play\(JSON\.parse\('(.*?)'\)\)`)
 )
 
@@ -65,14 +63,10 @@ func (p *Provider) client() *http.Client {
 	return defaultClient
 }
 
-// List searches via a plain, fully server-paginated HTML page. Browsing (no
-// search) uses /trending for page 1, which is also plain HTML — but
-// /trending itself 404s on any ?page=, so a deeper page instead goes
-// through an undocumented JSON feed endpoint found by reading the page's
-// own inline script, not published anywhere. If that endpoint ever changes
-// shape or disappears, browsing degrades to "page 1 only" rather than
-// erroring, since it's a bonus on top of the plain HTML path, not something
-// the rest of the app depends on.
+// List searches via plain, server-paginated HTML. Browsing uses /trending
+// for page 1, but /trending 404s on any ?page= — deeper pages go through
+// an undocumented JSON feed endpoint instead, and degrade to an empty page
+// if that endpoint ever changes shape.
 func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error) {
 	page := params.Page
 	if page < 1 {
@@ -102,7 +96,6 @@ func (p *Provider) fetchHTML(listURL string, page int) (*provider.ListResult, er
 
 	switch res.StatusCode {
 	case http.StatusOK:
-		// continue
 	case http.StatusNotFound:
 		return emptyPage(page), nil
 	default:
@@ -127,7 +120,6 @@ func (p *Provider) fetchFeed(page int) (*provider.ListResult, error) {
 
 	switch res.StatusCode {
 	case http.StatusOK:
-		// continue
 	case http.StatusNotFound:
 		return emptyPage(page), nil
 	default:
@@ -195,11 +187,6 @@ func parseList(r io.Reader, page int) (*provider.ListResult, error) {
 	}, nil
 }
 
-// unescapeJSString undoes the JS single-quoted string literal escaping
-// wrapping a JSON.parse argument (\uXXXX, plus other backslash escapes
-// where JS just treats an escape it doesn't recognize as the escaped
-// character verbatim — including the \/ this payload also carries), so the
-// result is valid JSON for json.Unmarshal.
 func unescapeJSString(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
