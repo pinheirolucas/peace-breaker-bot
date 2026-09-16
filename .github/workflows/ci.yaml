@@ -28,20 +28,12 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-  build-windows:
-    runs-on: windows-latest
-
-    steps:
-      - name: Set up repo
-        uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: .tool-versions
-
-      - name: Build
-        run: go build -o bin\peace-breaker-bot.exe .
+      - name: Build (Windows cross-compile)
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+        run: go build -o bin/peace-breaker-bot.exe .
 
   govulncheck:
     runs-on: ubuntu-latest
