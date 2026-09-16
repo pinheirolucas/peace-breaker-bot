@@ -40,7 +40,6 @@ func TestParseListReadsNamesAndJoinsTheAudioSource(t *testing.T) {
 }
 
 func TestParseListIgnoresTheDiscoverFallbackGrid(t *testing.T) {
-	// search-empty.html has zero real results but does carry the Discover grid.
 	got, err := parseList(strings.NewReader(fixture(t, "search-empty.html")), 1, searchPageSize)
 	if err != nil {
 		t.Fatalf("parseList: %v", err)

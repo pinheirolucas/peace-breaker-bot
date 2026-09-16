@@ -19,8 +19,8 @@ const (
 	key         = "soundboardguy"
 	displayName = "SoundboardGuy"
 
-	browsePageSize = 40 // confirmed against /sounds/
-	searchPageSize = 10 // confirmed against a search; different WP posts-per-page setting
+	browsePageSize = 40
+	searchPageSize = 10
 )
 
 var defaultClient = httpclient.New()
@@ -93,7 +93,6 @@ func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error
 
 	switch res.StatusCode {
 	case http.StatusOK:
-		// continue
 	case http.StatusNotFound:
 		return emptyPage(page, pageSize), nil
 	default:
@@ -128,10 +127,6 @@ func parseList(r io.Reader, page, pageSize int) (*provider.ListResult, error) {
 	instants := []provider.Instant{}
 	malformed := 0
 
-	// Every page, even a zero-result search, also renders a "Discover Meme
-	// sound buttons" grid of unrelated recommendations using the same
-	// trigger/audio markup, marked only by a --infinite class — skip it or
-	// every listing comes back polluted with those recommendations.
 	document.Find("div.sbg-big-grid").Each(func(i int, grid *goquery.Selection) {
 		if grid.HasClass("--infinite") {
 			return
