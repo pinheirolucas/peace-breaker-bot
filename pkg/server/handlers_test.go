@@ -18,10 +18,6 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
 )
 
-// fakeBotStatus is a BotStatus test double: a fixed VoiceStatus, no bot or
-// Discord connection required. connectedBotStatus() is what every existing
-// test uses so today's play-path behavior is unaffected by the new gate;
-// tests about the gate itself configure Connected: false.
 type fakeBotStatus struct {
 	status bot.VoiceStatus
 }
@@ -175,12 +171,6 @@ func TestHandleBotPlayRejectsAnInvalidURL(t *testing.T) {
 	}
 }
 
-// TestHandleBotPlayRejectsWhenTheBotHasNoVoiceConnection guards the 409
-// gate: it must be checked before the player ever gets to touch the clip.
-// The cache is pointed at an upstream that answers 404, which is what the
-// player would surface as instant_not_found if the gate were skipped — a
-// different, wrong status/label that fails this test rather than letting a
-// skipped gate pass for the wrong reason.
 func TestHandleBotPlayRejectsWhenTheBotHasNoVoiceConnection(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -381,10 +371,6 @@ func TestHandleBotStatusReflectsAConnectedBot(t *testing.T) {
 	}
 }
 
-// TestHandleBotStatusOmitsEmptyNamesWhenConnectedWithNoCacheHit guards the
-// omitempty on guildName/channelName: connected but with no name resolved
-// from cache must leave those two keys out of the JSON entirely, not send
-// them as "".
 func TestHandleBotStatusOmitsEmptyNamesWhenConnectedWithNoCacheHit(t *testing.T) {
 	status := bot.VoiceStatus{Connected: true, GuildID: 123, ChannelID: 456}
 	s := New(instant.NewPlayer(), &fakeBotStatus{status: status})

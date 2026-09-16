@@ -27,9 +27,7 @@ const autodiscoveryServiceName = "_myinstants._tcp"
 // be the httpclient one: myinstants.com answers 403 to Go's default User-Agent.
 var defaultClient = httpclient.New()
 
-// BotStatus is the narrow slice of *bot.Bot the server needs — just enough
-// to gate POST /bot/play and answer GET /bot/status, without importing all
-// of pkg/bot.
+// BotStatus is the bot's voice-connection state, as the server needs it.
 type BotStatus interface {
 	Status() bot.VoiceStatus
 }
@@ -193,11 +191,6 @@ type botStatusResponse struct {
 	ChannelName string `json:"channelName,omitempty"`
 }
 
-// handleBotStatus reports whether the bot has an open voice connection, so
-// the UI can pre-emptively disable "send to Discord" instead of only
-// reacting to a failed POST /api/v1/bot/play. IDs are sent as strings —
-// Discord snowflakes overflow JS's safe integer range — and the name fields
-// are omitted entirely while disconnected, rather than sent empty.
 func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
 	status := s.bot.Status()
 	out := &botStatusResponse{Connected: status.Connected}
