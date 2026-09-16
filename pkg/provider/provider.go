@@ -1,78 +1,73 @@
 // Package provider abstracts myinstants.com and the other clip sites behind
-// one interface, so pkg/server can drive any of them through the same
-// handler instead of hand-rolling a fetch/parse pipeline per site.
+// one Provider interface.
 package provider
 
 import "errors"
 
-// ListParams is provider-agnostic; a provider that doesn't understand a
-// field (e.g. Region, which only myinstants honors) ignores it rather than
-// erroring, so switching providers from a client that hasn't cleared every
-// field doesn't turn into a 400.
+// ListParams is provider-agnostic; a provider ignores a field it doesn't
+// understand (e.g. Region) rather than erroring.
 type ListParams struct {
 	Page   int
 	Search string
 	Region string
 }
 
-// Instant is one playable clip as a provider's listing exposes it.
+// Instant is one playable clip from a provider's listing.
 type Instant struct {
 	Name string
 	URL  string
 }
 
+// ListResult is one page of a provider's listing.
 type ListResult struct {
 	Instants []Instant
 	Pages    int
 }
 
 // Provider fetches and parses one clip site's listing pages. Each
-// implementation owns its own URL building, HTTP fetch and markup parsing —
-// pkg/server only drives the interface.
+// implementation owns its own URL building, HTTP fetch and markup parsing.
 type Provider interface {
 	Key() string
 	DisplayName() string
 	List(params ListParams) (*ListResult, error)
 
-	// AllowedContentHosts lists the hosts a clip URL from this provider can
-	// legitimately live on, so a content-fetch endpoint can validate a URL
-	// before downloading it.
+	// AllowedContentHosts lists the hosts a clip URL from this provider may
+	// live on, so a content-fetch endpoint can validate a URL before
+	// downloading it.
 	AllowedContentHosts() []string
 }
 
 var (
-	// ErrInvalidRegion is returned by a provider whose Region format/value
-	// isn't one it can serve — currently only myinstants has a concept of
-	// region.
+	// ErrInvalidRegion is returned when a provider doesn't support the
+	// given Region — only myinstants has a concept of region.
 	ErrInvalidRegion = errors.New("provider: region not supported")
 
-	// ErrUnexpectedMarkup means the response parsed but its shape didn't
-	// match what the provider's scraper expects (e.g. a listing's names and
-	// play links no longer line up) — the site's markup likely changed.
+	// ErrUnexpectedMarkup means the response parsed but didn't have the
+	// shape the scraper expects — the site's markup likely changed.
 	ErrUnexpectedMarkup = errors.New("provider: unexpected markup shape")
 
-	// ErrUpstreamUnavailable means the request to the provider's site never
-	// got a response at all (DNS, connection, timeout).
+	// ErrUpstreamUnavailable means the request to the provider's site got
+	// no response at all.
 	ErrUpstreamUnavailable = errors.New("provider: upstream request failed")
 
-	// ErrBadUpstreamStatus means the provider's site answered, but with a
-	// status this provider doesn't treat as success or as an empty result.
+	// ErrBadUpstreamStatus means the provider's site answered with a
+	// status that isn't success or an empty result.
 	ErrBadUpstreamStatus = errors.New("provider: upstream answered with an error status")
 )
 
 // Registry looks providers up by their Key().
 type Registry map[string]Provider
 
+// Get looks up a provider by key.
 func (r Registry) Get(key string) (Provider, bool) {
 	p, ok := r[key]
 	return p, ok
 }
 
-// InferPages estimates how many pages of a listing exist from how many
-// items this page returned, since none of the sites this package scrapes
-// publish a real page count: a full page (pageSize items) means there may
-// be a page+1, a short page means this is the last one, and an empty page
-// means the previous page was actually the last.
+// InferPages estimates how many pages of a listing remain from how many
+// items this page returned, since none of these sites publish a real page
+// count: a full page means there may be another, a short page means this is
+// the last one, an empty page means the previous one was actually last.
 func InferPages(page, count, pageSize int) int {
 	switch {
 	case count >= pageSize:

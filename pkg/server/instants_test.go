@@ -10,8 +10,7 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
 )
 
-// fakeProvider is a minimal provider.Provider double so dispatch/envelope
-// tests don't need to depend on any one provider's markup or fixtures.
+// fakeProvider is a provider.Provider double for dispatch/envelope tests.
 type fakeProvider struct {
 	key    string
 	result *provider.ListResult
@@ -123,8 +122,6 @@ func TestHandleInstantListMapsProviderErrorsToTheirStatusCodes(t *testing.T) {
 	}
 }
 
-// A smoke test against the real, unswapped registry — guards New() wiring
-// up a usable default myinstants provider without hitting the network.
 func TestHandleInstantListUsesARealMyInstantsProviderByDefault(t *testing.T) {
 	s := New(instant.NewPlayer(), connectedBotStatus())
 
