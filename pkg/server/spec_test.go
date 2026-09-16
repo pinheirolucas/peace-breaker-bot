@@ -32,6 +32,7 @@ func TestOpenAPISpecIsValidYAML(t *testing.T) {
 	wantPaths := []string{
 		"/api/v1/bot/play",
 		"/api/v1/bot/stop",
+		"/api/v1/bot/status",
 		"/api/v1/instants/{url}/content",
 		"/api/v1/instants",
 		"/api/v1/openapi.yaml",
@@ -45,7 +46,7 @@ func TestOpenAPISpecIsValidYAML(t *testing.T) {
 }
 
 func TestHandleOpenAPISpecServesTheEmbeddedDocument(t *testing.T) {
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	s.handleOpenAPISpec(rec, httptest.NewRequest(http.MethodGet, "/api/v1/openapi.yaml", nil))
@@ -59,7 +60,7 @@ func TestHandleOpenAPISpecServesTheEmbeddedDocument(t *testing.T) {
 }
 
 func TestHandleDocsServesAnHTMLPageReferencingTheSpec(t *testing.T) {
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	s.handleDocs(rec, httptest.NewRequest(http.MethodGet, "/api/docs", nil))

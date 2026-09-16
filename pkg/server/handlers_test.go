@@ -13,9 +13,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
 )
+
+type fakeBotStatus struct {
+	status bot.VoiceStatus
+}
+
+func (f *fakeBotStatus) Status() bot.VoiceStatus { return f.status }
+
+func connectedBotStatus() *fakeBotStatus {
+	return &fakeBotStatus{status: bot.VoiceStatus{Connected: true}}
+}
 
 // seedCache points the shared fsutil cache at a temp dir holding a fixture for
 // each link, so the handlers resolve clips without any network access.
@@ -52,7 +63,7 @@ func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 }
 
 func TestHandleInstantContentRejectsAnUnusableURL(t *testing.T) {
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/not-a-url/content", nil)
 	req.SetPathValue("url", "not-a-url")
@@ -72,7 +83,7 @@ func TestHandleInstantContentReturnsTheClipAsADataURI(t *testing.T) {
 	const link = "https://example.com/a.mp3"
 	seedCache(t, link)
 
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
 	req.SetPathValue("url", link)
@@ -112,7 +123,7 @@ func TestHandleInstantContentReportsAMissingClip(t *testing.T) {
 
 	link := upstream.URL + "/does-not-exist.mp3"
 
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
 	req.SetPathValue("url", link)
@@ -133,7 +144,7 @@ func TestHandleInstantContentReportsAMissingClip(t *testing.T) {
 }
 
 func TestHandleBotPlayRejectsAnInvalidBody(t *testing.T) {
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader("not json")))
@@ -147,7 +158,7 @@ func TestHandleBotPlayRejectsAnInvalidBody(t *testing.T) {
 }
 
 func TestHandleBotPlayRejectsAnInvalidURL(t *testing.T) {
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"not a url"}`)))
@@ -157,6 +168,31 @@ func TestHandleBotPlayRejectsAnInvalidURL(t *testing.T) {
 	}
 	if got := decodeBody(t, rec)["label"]; got != "invalid_url" {
 		t.Errorf("label = %v, want invalid_url", got)
+	}
+}
+
+func TestHandleBotPlayRejectsWhenTheBotHasNoVoiceConnection(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+
+	previous := fsutil.Default
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	t.Cleanup(func() { fsutil.Default = previous })
+
+	link := upstream.URL + "/does-not-exist.mp3"
+
+	s := New(instant.NewPlayer(), &fakeBotStatus{status: bot.VoiceStatus{Connected: false}})
+
+	rec := httptest.NewRecorder()
+	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+	if got := decodeBody(t, rec)["label"]; got != "bot_not_connected" {
+		t.Errorf("label = %v, want bot_not_connected", got)
 	}
 }
 
@@ -172,7 +208,7 @@ func TestHandleBotPlayReportsANotFoundClipAs404(t *testing.T) {
 
 	link := upstream.URL + "/does-not-exist.mp3"
 
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
@@ -201,7 +237,7 @@ func TestHandleBotPlayReturnsOnlyOneResponseForUnsupportedAudio(t *testing.T) {
 
 	link := upstream.URL + "/a.mp3"
 
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
@@ -228,7 +264,7 @@ func TestHandleBotPlayReturnsTheExitReasonWhenPlaybackEnds(t *testing.T) {
 	seedCache(t, link)
 
 	player := instant.NewPlayer()
-	s := New(player)
+	s := New(player, connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
@@ -261,7 +297,7 @@ func TestHandleBotStopReleasesAnInFlightPlay(t *testing.T) {
 	seedCache(t, link)
 
 	player := instant.NewPlayer()
-	s := New(player)
+	s := New(player, connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
@@ -288,12 +324,94 @@ func TestHandleBotStopReleasesAnInFlightPlay(t *testing.T) {
 }
 
 func TestHandleBotStopIsSafeWhenNothingIsPlaying(t *testing.T) {
-	s := New(instant.NewPlayer())
+	s := New(instant.NewPlayer(), connectedBotStatus())
 
 	rec := httptest.NewRecorder()
 	s.handleBotStop(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/stop", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestHandleBotStatusReflectsAConnectedBot(t *testing.T) {
+	status := bot.VoiceStatus{
+		Connected:   true,
+		GuildID:     123,
+		GuildName:   "Guild",
+		ChannelID:   456,
+		ChannelName: "General",
+	}
+	s := New(instant.NewPlayer(), &fakeBotStatus{status: status})
+
+	rec := httptest.NewRecorder()
+	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	data, ok := decodeBody(t, rec)["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("response had no data object: %s", rec.Body.String())
+	}
+	if data["connected"] != true {
+		t.Errorf("connected = %v, want true", data["connected"])
+	}
+	if data["guildId"] != "123" {
+		t.Errorf("guildId = %v, want \"123\"", data["guildId"])
+	}
+	if data["guildName"] != "Guild" {
+		t.Errorf("guildName = %v, want Guild", data["guildName"])
+	}
+	if data["channelId"] != "456" {
+		t.Errorf("channelId = %v, want \"456\"", data["channelId"])
+	}
+	if data["channelName"] != "General" {
+		t.Errorf("channelName = %v, want General", data["channelName"])
+	}
+}
+
+func TestHandleBotStatusOmitsEmptyNamesWhenConnectedWithNoCacheHit(t *testing.T) {
+	status := bot.VoiceStatus{Connected: true, GuildID: 123, ChannelID: 456}
+	s := New(instant.NewPlayer(), &fakeBotStatus{status: status})
+
+	rec := httptest.NewRecorder()
+	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
+
+	data, ok := decodeBody(t, rec)["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("response had no data object: %s", rec.Body.String())
+	}
+	if _, present := data["guildName"]; present {
+		t.Errorf("guildName present in response, want omitted: %v", data["guildName"])
+	}
+	if _, present := data["channelName"]; present {
+		t.Errorf("channelName present in response, want omitted: %v", data["channelName"])
+	}
+	if data["guildId"] != "123" || data["channelId"] != "456" {
+		t.Errorf("guildId/channelId = %v/%v, want 123/456", data["guildId"], data["channelId"])
+	}
+}
+
+func TestHandleBotStatusReflectsADisconnectedBot(t *testing.T) {
+	s := New(instant.NewPlayer(), &fakeBotStatus{status: bot.VoiceStatus{Connected: false}})
+
+	rec := httptest.NewRecorder()
+	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	data, ok := decodeBody(t, rec)["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("response had no data object: %s", rec.Body.String())
+	}
+	if data["connected"] != false {
+		t.Errorf("connected = %v, want false", data["connected"])
+	}
+	for _, key := range []string{"guildId", "guildName", "channelId", "channelName"} {
+		if _, present := data[key]; present {
+			t.Errorf("%s present in a disconnected response, want omitted: %v", key, data[key])
+		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/disgoorg/disgo"
@@ -15,6 +16,7 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/voice"
+	"github.com/disgoorg/snowflake/v2"
 	davesession "github.com/thomas-vilte/dave-go/session"
 	"golang.org/x/text/language"
 
@@ -32,9 +34,71 @@ type Bot struct {
 	// for a single-owner bot that wants a fixed response language.
 	locale string
 
+	vcMu   sync.RWMutex
 	vc     voice.Conn
+	client *bot.Client
+
 	disp   *command.DiscordDispatcher
 	player *instant.Player
+}
+
+func (b *Bot) voiceConn() voice.Conn {
+	b.vcMu.RLock()
+	defer b.vcMu.RUnlock()
+
+	return b.vc
+}
+
+func (b *Bot) setVoiceConn(conn voice.Conn) {
+	b.vcMu.Lock()
+	defer b.vcMu.Unlock()
+
+	b.vc = conn
+}
+
+func (b *Bot) setClient(client *bot.Client) {
+	b.vcMu.Lock()
+	defer b.vcMu.Unlock()
+
+	b.client = client
+}
+
+func (b *Bot) discordClient() *bot.Client {
+	b.vcMu.RLock()
+	defer b.vcMu.RUnlock()
+
+	return b.client
+}
+
+// VoiceStatus is the bot's current voice connection.
+type VoiceStatus struct {
+	Connected   bool
+	GuildID     snowflake.ID
+	GuildName   string
+	ChannelID   snowflake.ID
+	ChannelName string
+}
+
+// Status returns the bot's current voice connection.
+func (b *Bot) Status() VoiceStatus {
+	conn := b.voiceConn()
+	if conn == nil {
+		return VoiceStatus{}
+	}
+
+	client := b.discordClient()
+
+	status := VoiceStatus{Connected: true, GuildID: conn.GuildID()}
+	if guild, ok := client.Caches.Guild(status.GuildID); ok {
+		status.GuildName = guild.Name
+	}
+	if channelID := conn.ChannelID(); channelID != nil {
+		status.ChannelID = *channelID
+		if channel, ok := client.Caches.Channel(*channelID); ok {
+			status.ChannelName = channel.Name()
+		}
+	}
+	return status
 }
 
 func New(token string, player *instant.Player, options ...Option) (*Bot, error) {
@@ -91,6 +155,9 @@ func (b *Bot) Start() error {
 	}
 	defer client.Close(context.Background())
 
+	// Set before any goroutine that could call Status() starts.
+	b.setClient(client)
+
 	opusaudio.OnError = func(str string, err error) {
 		slog.Debug(str, "err", err)
 	}
@@ -100,11 +167,12 @@ func (b *Bot) Start() error {
 	}
 
 	defer func() {
-		if b.vc == nil {
+		conn := b.voiceConn()
+		if conn == nil {
 			return
 		}
 
-		b.vc.Close(context.Background())
+		conn.Close(context.Background())
 	}()
 
 	go func() {
@@ -112,13 +180,14 @@ func (b *Bot) Start() error {
 		for {
 			path := b.player.GetNextPlay()
 
-			if b.vc == nil {
+			conn := b.voiceConn()
+			if conn == nil {
 				b.player.End()
 				continue
 			}
 
 			slog.Info("playing instant", "path", path)
-			opusaudio.PlayAudioFile(b.vc, path, b.player.StopChan)
+			opusaudio.PlayAudioFile(conn, path, b.player.StopChan)
 			b.player.End()
 		}
 	}()
