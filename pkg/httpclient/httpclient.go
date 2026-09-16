@@ -1,11 +1,5 @@
 // Package httpclient builds the client every request to myinstants.com goes
-// through.
-//
-// The User-Agent it sets is load-bearing, not cosmetic: myinstants.com sits
-// behind Cloudflare, which answers 403 to Go's default Go-http-client/2.0 (and to
-// curl's, and to a bare Mozilla/5.0). A User-Agent that names this application
-// gets through. Swapping this client back for http.DefaultClient breaks both the
-// instant listing and the clip download.
+// through, setting a non-default User-Agent required to get past Cloudflare.
 package httpclient
 
 import (
@@ -18,8 +12,6 @@ const UserAgent = "peace-breaker-bot/1.0"
 
 const timeout = 30 * time.Second
 
-// userAgentTransport sets UserAgent on requests that do not carry one, so a
-// caller can still send its own.
 type userAgentTransport struct {
 	base http.RoundTripper
 }
@@ -29,7 +21,6 @@ func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 		return t.base.RoundTrip(req)
 	}
 
-	// A RoundTripper must not modify the request it is given.
 	req = req.Clone(req.Context())
 	req.Header.Set("User-Agent", UserAgent)
 

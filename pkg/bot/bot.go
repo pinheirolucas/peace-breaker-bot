@@ -30,8 +30,6 @@ type Bot struct {
 	token string
 	owner string
 
-	// locale overrides per-guild locale detection when set (bot.locale),
-	// for a single-owner bot that wants a fixed response language.
 	locale string
 
 	vcMu   sync.RWMutex
@@ -131,21 +129,17 @@ func (b *Bot) Start() error {
 				gateway.IntentMessageContent,
 			),
 		),
-		// Guilds/Channels/VoiceStates are uncached by default; !join looks
-		// all three up, so they must be explicitly enabled here.
+		// !join needs Guilds, Channels and VoiceStates cached; none are on by default.
 		bot.WithCacheConfigOpts(
 			cache.WithCaches(cache.FlagGuilds, cache.FlagChannels, cache.FlagVoiceStates),
 		),
 		bot.WithEventListenerFunc(b.handleReady),
 		bot.WithEventListenerFunc(b.handleMessages),
-		// Listeners run synchronously on the gateway's websocket read loop
-		// unless this is set. !join blocks on the voice handshake, which
-		// would otherwise stall that loop long enough to miss heartbeat
-		// ACKs and get disconnected as a zombie connection.
+		// Async listeners: !join blocks on the voice handshake, which would
+		// otherwise stall the gateway read loop and miss heartbeat ACKs.
 		bot.WithEventManagerConfigOpts(bot.WithAsyncEventsEnabled()),
-		// dave-go is a pure-Go DAVE/E2EE implementation; without a session
-		// factory here voice defaults to godave's noop (unencrypted) session,
-		// which Discord's voice gateway rejects with close code 4017.
+		// Without a DAVE session factory, voice defaults to an unencrypted
+		// noop session, which Discord's gateway rejects with close code 4017.
 		bot.WithVoiceManagerConfigOpts(
 			voice.WithDaveSessionCreateFunc(davesession.CreateFunc()),
 		),
@@ -222,11 +216,6 @@ func (b *Bot) handleMessages(e *events.MessageCreate) {
 	b.disp.Dispatch(e)
 }
 
-// localeFor resolves the language a response to e should be written in: the
-// configured bot.locale override always wins, for a single-owner bot that
-// wants a fixed language regardless of guild; otherwise the invoking guild's
-// own PreferredLocale. A DM carries no guild at all, so it falls straight
-// through to pkg/i18n's own English default.
 func (b *Bot) localeFor(e *events.MessageCreate) language.Tag {
 	if b.locale != "" {
 		return i18n.Match(b.locale)

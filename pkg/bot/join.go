@@ -35,10 +35,6 @@ func (b *Bot) join(ctx *command.DiscordContext) {
 	b.joinVoiceChannel(client, guild.ID, *voiceState.ChannelID, channel.Name())
 }
 
-// joinVoiceChannel connects to a voice channel already known by guild and
-// channel ID, shared by the !join command (which resolves the channel from
-// the invoking member's voice state) and the invite-link DM handler (which
-// resolves it from a resolved invite instead).
 func (b *Bot) joinVoiceChannel(client *bot.Client, guildID, channelID snowflake.ID, channelName string) {
 	if b.voiceConn() != nil {
 		return

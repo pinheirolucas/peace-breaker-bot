@@ -18,9 +18,8 @@ var (
 	ErrUnsuportedAudioFormat = errors.New("unduported audio format")
 )
 
-// Cache resolves instant links to files on disk, downloading them on first use.
-// Client and Dir exist so tests can point it at an httptest.Server and a
-// temporary directory; both fall back to the production defaults when unset.
+// Cache resolves instant links to files on disk, downloading them on first
+// use. Client and Dir default to production values when unset.
 type Cache struct {
 	Client *http.Client
 	Dir    string
@@ -29,8 +28,6 @@ type Cache struct {
 // Default backs the package-level functions the rest of the app calls.
 var Default = &Cache{}
 
-// defaultClient downloads clips when Cache.Client is unset. It has to be the
-// httpclient one: myinstants.com answers 403 to Go's default User-Agent.
 var defaultClient = httpclient.New()
 
 func GetFromCache(link string) (*os.File, error) {
@@ -81,10 +78,8 @@ func (c *Cache) Get(link string) (*os.File, error) {
 		return nil, fmt.Errorf("failed to fetch instant: %d", fr.StatusCode)
 	}
 
-	// The mp3 sniff below reads a bounded amount off the reader and does not
-	// put it back, so copying fr.Body afterwards writes only whatever was
-	// left — nothing at all for a clip smaller than the sniff buffer. Read
-	// the head ourselves and stitch it back on before copying.
+	// Sniffing consumes from fr.Body without putting it back, so the head is
+	// read here and stitched back on before copying the rest.
 	head := make([]byte, 8192)
 	n, err := io.ReadFull(fr.Body, head)
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
@@ -112,8 +107,6 @@ func (c *Cache) Get(link string) (*os.File, error) {
 	return file, nil
 }
 
-// looksLikeMP3 sniffs the two signatures h2non/filetype checked for the mp3
-// matcher: an ID3v2 tag, or a raw MPEG frame's sync byte.
 func looksLikeMP3(head []byte) bool {
 	if len(head) >= 3 && string(head[:3]) == "ID3" {
 		return true

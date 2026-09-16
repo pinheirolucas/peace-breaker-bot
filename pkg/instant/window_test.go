@@ -16,8 +16,8 @@ func TestStopImmediatelyAfterHandoffIsNotLost(t *testing.T) {
 			reason <- r
 		}()
 
-		p.GetNextPlay() // consumer takes the path
-		p.Stop()        // ...and stops immediately
+		p.GetNextPlay()
+		p.Stop()
 
 		select {
 		case r := <-reason:

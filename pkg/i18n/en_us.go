@@ -1,7 +1,5 @@
 package i18n
 
-// enUS is authored directly, not translated from ptBR — a couple of these
-// read clearer in English than a literal rendering of the Portuguese would.
 var enUS = map[string]string{
 	"invalid_body":            "Invalid request",
 	"invalid_url":             "That URL isn't valid",

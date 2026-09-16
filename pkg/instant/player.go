@@ -62,10 +62,6 @@ func (p *Player) Play(link string) (string, error) {
 	}
 }
 
-// claimNotPlaying flips playing to false and reports whether this caller is the
-// one that won the flip. Stop and End both use it so that only a single caller
-// ever publishes to the channels, and so the channel sends happen outside the
-// lock — sending under it would deadlock against a concurrent Play.
 func (p *Player) claimNotPlaying() bool {
 	p.Lock()
 	defer p.Unlock()

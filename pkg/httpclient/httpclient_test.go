@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// userAgentServer records the User-Agent of the last request it received.
 func userAgentServer(t *testing.T) (*httptest.Server, *string) {
 	t.Helper()
 

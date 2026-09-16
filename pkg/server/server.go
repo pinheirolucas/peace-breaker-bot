@@ -23,8 +23,6 @@ import (
 
 const autodiscoveryServiceName = "_myinstants._tcp"
 
-// defaultClient scrapes myinstants.com when Server.client is unset. It has to
-// be the httpclient one: myinstants.com answers 403 to Go's default User-Agent.
 var defaultClient = httpclient.New()
 
 // BotStatus is the bot's voice-connection state, as the server needs it.
@@ -36,8 +34,6 @@ type Server struct {
 	player *instant.Player
 	bot    BotStatus
 
-	// myInstantsBaseURL and client let tests point the scrape at a fixture
-	// server; both fall back to the production values when unset.
 	myInstantsBaseURL string
 	client            *http.Client
 }
@@ -100,10 +96,6 @@ type response struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// languageFor negotiates the response language from an optional
-// Accept-Language header, defaulting to English. The UI never sends this
-// header — it already translates by label on its own — so this exists for
-// any other client.
 func languageFor(r *http.Request) language.Tag {
 	if header := r.Header.Get("Accept-Language"); header != "" {
 		return i18n.MatchAcceptLanguage(header)
@@ -161,7 +153,6 @@ func (s *Server) handleBotPlay(w http.ResponseWriter, r *http.Request) {
 	exitReason, err := s.player.Play(in.URL)
 	switch err {
 	case nil:
-		// continue
 	case instant.ErrInvalidLink:
 		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
 		return
@@ -229,9 +220,6 @@ type instantListResponse struct {
 	Pages    int              `json:"pages"`
 }
 
-// pageSize is how many instants myinstants.com puts on a full page. Their pages
-// no longer carry a pager, so the page count is inferred from it: a full page
-// means there may be more, a short one is the last.
 const pageSize = 36
 
 const defaultRegion = "us"
@@ -239,16 +227,10 @@ const defaultRegion = "us"
 var (
 	errNameLinkMismatch = errors.New("names and links count do not match")
 
-	// playURLPattern captures the clip path from a play button's
-	// onclick="play('/media/sounds/x.mp3', 'loader-…', '…')".
 	playURLPattern = regexp.MustCompile(`play\(\s*'([^']+)'`)
-
-	// regionPattern guards the region before it is put into an upstream path.
-	regionPattern = regexp.MustCompile(`^[a-z]{2}$`)
+	regionPattern  = regexp.MustCompile(`^[a-z]{2}$`)
 )
 
-// totalPages infers the page count from how many instants the requested page
-// held.
 func totalPages(page, count int) int {
 	switch {
 	case count >= pageSize:
@@ -260,10 +242,6 @@ func totalPages(page, count int) int {
 	}
 }
 
-// parseInstantList turns a myinstants.com listing page into the API response.
-// Split out of handleListInstants so the scraping — the part most likely to break
-// when their markup changes — can be tested against a fixture instead of the
-// live site.
 func parseInstantList(r io.Reader, baseURL string, page int) (*instantListResponse, error) {
 	document, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
@@ -322,15 +300,11 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The UI sends page=undefined when it has no page, so anything that is not
-	// a positive number means the first page rather than an error.
 	page, err := strconv.Atoi(strings.TrimSpace(vars.Get("page")))
 	if err != nil || page < 1 {
 		page = 1
 	}
 
-	// A search goes to /search/, which ignores the region. Browsing without one
-	// goes to the region's index: /search/ with no name answers 404.
 	var url string
 	search := strings.Replace(strings.TrimSpace(vars.Get("search")), " ", "+", -1)
 	if search != "" {
@@ -349,7 +323,6 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 
 	switch response.StatusCode {
 	case http.StatusOK:
-		// continue
 	case http.StatusNotFound:
 		writeSuccessResponse(w, &instantListResponse{
 			Instants: []*instantButton{},
@@ -365,7 +338,6 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 	list, err := parseInstantList(response.Body, s.baseURL(), page)
 	switch err {
 	case nil:
-		// continue
 	case errNameLinkMismatch:
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "name_link_not_matched")
 		return
