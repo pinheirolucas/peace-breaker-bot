@@ -46,6 +46,8 @@ func (p *Provider) AllowedContentHosts() []string {
 	return []string{"www.myinstants.com"}
 }
 
+func (p *Provider) SupportsRegion() bool { return true }
+
 func (p *Provider) baseURL() string {
 	if p.BaseURL != "" {
 		return p.BaseURL

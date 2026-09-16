@@ -35,6 +35,7 @@ func TestOpenAPISpecIsValidYAML(t *testing.T) {
 		"/api/v1/bot/status",
 		"/api/v1/instants/{url}/content",
 		"/api/v1/instants",
+		"/api/v1/providers",
 		"/api/v1/openapi.yaml",
 		"/api/docs",
 	}

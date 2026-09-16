@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -72,6 +74,7 @@ func (s *Server) Start(address string) error {
 	r.HandleFunc("GET /api/v1/bot/status", s.handleBotStatus)
 	r.HandleFunc("GET /api/v1/instants", s.handleListInstants)
 	r.HandleFunc("GET /api/v1/instants/{url}/content", s.handleInstantContent)
+	r.HandleFunc("GET /api/v1/providers", s.handleListProviders)
 	r.HandleFunc("GET /api/v1/openapi.yaml", s.handleOpenAPISpec)
 	r.HandleFunc("GET /api/docs", s.handleDocs)
 
@@ -198,22 +201,77 @@ func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, out)
 }
 
+// allowedContentHosts unions every registered provider's
+// AllowedContentHosts, so handleInstantContent can validate a URL against
+// every provider at once rather than only the one it was originally listed
+// under.
+func (s *Server) allowedContentHosts() map[string]struct{} {
+	hosts := make(map[string]struct{})
+	for _, p := range s.providers() {
+		for _, h := range p.AllowedContentHosts() {
+			hosts[strings.ToLower(h)] = struct{}{}
+		}
+	}
+
+	return hosts
+}
+
 func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 	lang := languageFor(r)
 
-	url := r.PathValue("url")
-	if !instant.IsLinkValid(url) {
+	rawURL := r.PathValue("url")
+	if !instant.IsLinkValid(rawURL) {
 		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
 		return
 	}
 
-	info, err := instant.GetPlayable(url)
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
+		return
+	}
+	if _, ok := s.allowedContentHosts()[strings.ToLower(parsed.Hostname())]; !ok {
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
+		return
+	}
+
+	info, err := instant.GetPlayable(rawURL)
 	if err != nil {
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}
 
 	writeSuccessResponse(w, info)
+}
+
+type providerInfo struct {
+	Key            string `json:"key"`
+	Name           string `json:"name"`
+	SupportsSearch bool   `json:"supportsSearch"`
+	SupportsRegion bool   `json:"supportsRegion"`
+}
+
+func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
+	registry := s.providers()
+
+	keys := make([]string, 0, len(registry))
+	for key := range registry {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	out := make([]providerInfo, 0, len(keys))
+	for _, key := range keys {
+		p := registry[key]
+		out = append(out, providerInfo{
+			Key:            p.Key(),
+			Name:           p.DisplayName(),
+			SupportsSearch: true,
+			SupportsRegion: p.SupportsRegion(),
+		})
+	}
+
+	writeSuccessResponse(w, out)
 }
 
 type instantButton struct {

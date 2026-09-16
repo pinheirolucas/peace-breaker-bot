@@ -11,9 +11,11 @@ import (
 )
 
 type fakeProvider struct {
-	key    string
-	result *provider.ListResult
-	err    error
+	key            string
+	result         *provider.ListResult
+	err            error
+	hosts          []string
+	supportsRegion bool
 
 	gotParams provider.ListParams
 }
@@ -26,7 +28,9 @@ func (f *fakeProvider) List(params provider.ListParams) (*provider.ListResult, e
 	return f.result, f.err
 }
 
-func (f *fakeProvider) AllowedContentHosts() []string { return nil }
+func (f *fakeProvider) SupportsRegion() bool { return f.supportsRegion }
+
+func (f *fakeProvider) AllowedContentHosts() []string { return f.hosts }
 
 func TestHandleInstantListDispatchesToTheDefaultProviderWhenNoneIsRequested(t *testing.T) {
 	fp := &fakeProvider{key: "myinstants", result: &provider.ListResult{
@@ -130,5 +134,115 @@ func TestHandleInstantListUsesARealMyInstantsProviderByDefault(t *testing.T) {
 	}
 	if p.Key() != "myinstants" {
 		t.Errorf("Key() = %q, want myinstants", p.Key())
+	}
+}
+
+func TestHandleInstantContentRejectsAHostNoProviderAllows(t *testing.T) {
+	s := New(instant.NewPlayer(), connectedBotStatus())
+
+	const link = "https://evil.example.com/a.mp3"
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
+	req.SetPathValue("url", link)
+
+	rec := httptest.NewRecorder()
+	s.handleInstantContent(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if got := decodeBody(t, rec)["label"]; got != "invalid_url" {
+		t.Errorf("label = %v, want invalid_url", got)
+	}
+}
+
+func TestHandleInstantContentAllowsAHostAnyRegisteredProviderAllows(t *testing.T) {
+	s := &Server{registry: provider.Registry{
+		"a": &fakeProvider{key: "a", hosts: []string{"a.example.com"}},
+		"b": &fakeProvider{key: "b", hosts: []string{"b.example.com"}},
+	}}
+
+	const link = "https://b.example.com/a.mp3"
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
+	req.SetPathValue("url", link)
+
+	rec := httptest.NewRecorder()
+	s.handleInstantContent(rec, req)
+
+	// Not registered under provider "a" specifically, but still allowed
+	// since it's provider "b"'s host — the union of every provider, not
+	// just the one the URL happened to be listed under.
+	if got := decodeBody(t, rec)["label"]; got == "invalid_url" {
+		t.Errorf("a host allowed by a different registered provider was rejected")
+	}
+}
+
+func TestHandleListProvidersListsEveryRegisteredProviderSortedByKey(t *testing.T) {
+	s := &Server{registry: provider.Registry{
+		"b": &fakeProvider{key: "b", supportsRegion: false},
+		"a": &fakeProvider{key: "a", supportsRegion: true},
+	}}
+
+	rec := httptest.NewRecorder()
+	s.handleListProviders(rec, httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var body struct {
+		Data []providerInfo `json:"data"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+
+	want := []providerInfo{
+		{Key: "a", Name: "a", SupportsSearch: true, SupportsRegion: true},
+		{Key: "b", Name: "b", SupportsSearch: true, SupportsRegion: false},
+	}
+	if len(body.Data) != len(want) {
+		t.Fatalf("got %d providers, want %d: %+v", len(body.Data), len(want), body.Data)
+	}
+	for i, w := range want {
+		if body.Data[i] != w {
+			t.Errorf("Data[%d] = %+v, want %+v", i, body.Data[i], w)
+		}
+	}
+}
+
+// A smoke test against the real, unswapped registry — guards every real
+// provider actually being registered and reachable through the endpoint.
+func TestHandleListProvidersIncludesEveryRealProvider(t *testing.T) {
+	s := New(instant.NewPlayer(), connectedBotStatus())
+
+	rec := httptest.NewRecorder()
+	s.handleListProviders(rec, httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil))
+
+	var body struct {
+		Data []providerInfo `json:"data"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+
+	got := make(map[string]bool)
+	for _, p := range body.Data {
+		got[p.Key] = p.SupportsRegion
+	}
+
+	want := map[string]bool{
+		"myinstants":    true,
+		"soundboardguy": false,
+		"soundbuttons":  false,
+	}
+	for key, supportsRegion := range want {
+		region, ok := got[key]
+		if !ok {
+			t.Errorf("providers list is missing %q", key)
+			continue
+		}
+		if region != supportsRegion {
+			t.Errorf("%s.SupportsRegion = %v, want %v", key, region, supportsRegion)
+		}
 	}
 }

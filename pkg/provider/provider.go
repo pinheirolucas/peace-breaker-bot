@@ -35,6 +35,11 @@ type Provider interface {
 	// live on, so a content-fetch endpoint can validate a URL before
 	// downloading it.
 	AllowedContentHosts() []string
+
+	// SupportsRegion reports whether Region in ListParams does anything for
+	// this provider, so a provider picker can decide whether to show a
+	// region field at all.
+	SupportsRegion() bool
 }
 
 var (

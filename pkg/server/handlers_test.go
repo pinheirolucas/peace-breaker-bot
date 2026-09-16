@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,19 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
 )
+
+// serverAllowingHost builds a Server whose only registered provider allows
+// content from host, so a content-fetch test can use an arbitrary/test
+// upstream without needing it to be one of the real providers' hosts.
+func serverAllowingHost(host string) *Server {
+	return &Server{
+		player:   instant.NewPlayer(),
+		bot:      connectedBotStatus(),
+		registry: provider.Registry{"test": &fakeProvider{key: "test", hosts: []string{host}}},
+	}
+}
 
 type fakeBotStatus struct {
 	status bot.VoiceStatus
@@ -83,7 +96,7 @@ func TestHandleInstantContentReturnsTheClipAsADataURI(t *testing.T) {
 	const link = "https://example.com/a.mp3"
 	seedCache(t, link)
 
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := serverAllowingHost("example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
 	req.SetPathValue("url", link)
@@ -123,7 +136,11 @@ func TestHandleInstantContentReportsAMissingClip(t *testing.T) {
 
 	link := upstream.URL + "/does-not-exist.mp3"
 
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	upstreamHost, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatalf("parsing upstream URL: %v", err)
+	}
+	s := serverAllowingHost(upstreamHost.Hostname())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
 	req.SetPathValue("url", link)

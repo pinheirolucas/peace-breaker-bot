@@ -163,8 +163,13 @@ paths:
         Downloads/caches the clip at `url` (same cache `POST /api/v1/bot/play`
         uses) and returns it inline, without touching the bot or its voice
         connection. Meant for local preview in the UI. `url` is the clip's
-        full myinstants.com URL, percent-encoded into this single path
-        segment (e.g. `:` becomes `%3A`, `/` becomes `%2F`).
+        full URL, percent-encoded into this single path segment (e.g. `:`
+        becomes `%3A`, `/` becomes `%2F`). `url`'s host must be one of the
+        registered providers' declared content hosts (see `GET
+        /api/v1/providers`) — a URL that doesn't decode to a usable URL at
+        all, and a URL on a host no registered provider recognizes, answer
+        the same `invalid_url` 400, so a disallowed host can't be
+        distinguished from a malformed one.
       parameters:
         - name: url
           in: path
@@ -172,7 +177,7 @@ paths:
           schema:
             type: string
             format: uri
-          description: The myinstants.com clip URL to fetch, percent-encoded.
+          description: The clip URL to fetch, percent-encoded. Must be on a host some registered provider serves clips from.
       responses:
         "200":
           description: The clip resolved, or it didn't — see `data.exists`.
@@ -188,7 +193,7 @@ paths:
                   summary: Clip could not be resolved
                   value: { data: { exists: false } }
         "400":
-          description: The path segment didn't decode to a usable URL.
+          description: The path segment didn't decode to a usable URL, or its host isn't one any registered provider allows.
           content:
             application/json:
               schema:
@@ -314,6 +319,30 @@ paths:
                 badHttpStatus:
                   summary: The provider's site answered a non-200/404 status
                   value: { label: bad_http_status, message: "That provider's site answered with an error" }
+
+  /api/v1/providers:
+    get:
+      operationId: listProviders
+      summary: List the registered clip providers
+      description: |
+        Static-ish list a UI can build a provider picker from, instead of
+        hardcoding provider keys client-side. `key` is what `GET
+        /api/v1/instants`'s `provider` query param takes. `supportsRegion`
+        tells a client whether to show a region field for that provider —
+        currently only `myinstants` does anything with it.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderListSuccessEnvelope"
+              examples:
+                results:
+                  value:
+                    data:
+                      - { key: myinstants, name: MyInstants, supportsSearch: true, supportsRegion: true }
+                      - { key: soundboardguy, name: SoundboardGuy, supportsSearch: true, supportsRegion: false }
+                      - { key: soundbuttons, name: Sound Buttons, supportsSearch: true, supportsRegion: false }
 
   /api/v1/openapi.yaml:
     get:
@@ -449,3 +478,28 @@ components:
                   description: Always present, even when empty (e.g. a search paged past its end).
                 pages:
                   type: integer
+
+    Provider:
+      type: object
+      properties:
+        key:
+          type: string
+          description: What GET /api/v1/instants's provider query param takes to select this provider.
+        name:
+          type: string
+        supportsSearch:
+          type: boolean
+        supportsRegion:
+          type: boolean
+          description: Whether GET /api/v1/instants's region query param does anything for this provider.
+
+    ProviderListSuccessEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Provider"

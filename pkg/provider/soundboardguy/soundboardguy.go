@@ -42,6 +42,8 @@ func (p *Provider) AllowedContentHosts() []string {
 	return []string{"soundboardguy.com"}
 }
 
+func (p *Provider) SupportsRegion() bool { return false }
+
 func (p *Provider) baseURL() string {
 	if p.BaseURL != "" {
 		return p.BaseURL
