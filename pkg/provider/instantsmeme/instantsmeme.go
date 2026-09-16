@@ -81,7 +81,6 @@ func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error
 
 	switch res.StatusCode {
 	case http.StatusOK:
-		// continue
 	case http.StatusNotFound:
 		return emptyPage(page), nil
 	default:
