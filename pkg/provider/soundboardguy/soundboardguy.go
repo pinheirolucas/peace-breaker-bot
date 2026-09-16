@@ -19,11 +19,8 @@ const (
 	key         = "soundboardguy"
 	displayName = "SoundboardGuy"
 
-	// Confirmed separately against live pages: a full /sounds/ archive page
-	// is 40 results, a full search results page is 10 — this WordPress
-	// theme uses a different posts-per-page setting for each.
-	browsePageSize = 40
-	searchPageSize = 10
+	browsePageSize = 40 // confirmed against /sounds/
+	searchPageSize = 10 // confirmed against a search; different WP posts-per-page setting
 )
 
 var defaultClient = httpclient.New()
@@ -61,9 +58,8 @@ func (p *Provider) client() *http.Client {
 	return defaultClient
 }
 
-// List browses /sounds/ (no search) or searches by name. Category pages
-// (e.g. /soundboard/discord-soundboard/) also exist and paginate the same
-// way, but /sounds/ covers every sound without picking a category.
+// List browses /sounds/ (no search) or searches by name; category pages
+// also exist and paginate the same way, but /sounds/ covers every sound.
 func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error) {
 	page := params.Page
 	if page < 1 {
@@ -114,16 +110,6 @@ func emptyPage(page, pageSize int) *provider.ListResult {
 	}
 }
 
-// parseList joins each a.shareable--trigger's data-audio id to the
-// audio#<id> source[src] it names, since the name and the clip URL live on
-// two separate elements rather than one button carrying both.
-//
-// Every page — including a zero-result search — also renders a "Discover
-// Meme sound buttons" grid of unrelated recommendations
-// (div.sbg-big-grid--infinite) using the exact same trigger/audio markup as
-// the real results (div.sbg-big-grid, no modifier). Triggers are only
-// collected from within a real, non-"--infinite" grid, or every listing
-// would come back polluted with those recommendations.
 func parseList(r io.Reader, page, pageSize int) (*provider.ListResult, error) {
 	document, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
@@ -142,6 +128,10 @@ func parseList(r io.Reader, page, pageSize int) (*provider.ListResult, error) {
 	instants := []provider.Instant{}
 	malformed := 0
 
+	// Every page, even a zero-result search, also renders a "Discover Meme
+	// sound buttons" grid of unrelated recommendations using the same
+	// trigger/audio markup, marked only by a --infinite class — skip it or
+	// every listing comes back polluted with those recommendations.
 	document.Find("div.sbg-big-grid").Each(func(i int, grid *goquery.Selection) {
 		if grid.HasClass("--infinite") {
 			return
