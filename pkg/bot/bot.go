@@ -34,10 +34,6 @@ type Bot struct {
 	// for a single-owner bot that wants a fixed response language.
 	locale string
 
-	// vcMu guards vc and client below. Both are written from the gateway's
-	// own goroutines (Start's playback loop, join.go, leave.go) and read
-	// from those same goroutines as well as, via Status, an HTTP server
-	// goroutine that has no other synchronization with the bot at all.
 	vcMu   sync.RWMutex
 	vc     voice.Conn
 	client *bot.Client
@@ -46,8 +42,6 @@ type Bot struct {
 	player *instant.Player
 }
 
-// voiceConn returns the bot's current voice connection, or nil when it has
-// none. Safe to call from any goroutine.
 func (b *Bot) voiceConn() voice.Conn {
 	b.vcMu.RLock()
 	defer b.vcMu.RUnlock()
@@ -55,8 +49,6 @@ func (b *Bot) voiceConn() voice.Conn {
 	return b.vc
 }
 
-// setVoiceConn replaces the bot's current voice connection, nil included.
-// Safe to call from any goroutine.
 func (b *Bot) setVoiceConn(conn voice.Conn) {
 	b.vcMu.Lock()
 	defer b.vcMu.Unlock()
@@ -64,8 +56,6 @@ func (b *Bot) setVoiceConn(conn voice.Conn) {
 	b.vc = conn
 }
 
-// setClient stores the disgo client created in Start(), so Status can look
-// up cached guild/channel info from any goroutine.
 func (b *Bot) setClient(client *bot.Client) {
 	b.vcMu.Lock()
 	defer b.vcMu.Unlock()
@@ -73,8 +63,6 @@ func (b *Bot) setClient(client *bot.Client) {
 	b.client = client
 }
 
-// discordClient returns the disgo client stored by setClient, or nil before
-// Start() has created one. Safe to call from any goroutine.
 func (b *Bot) discordClient() *bot.Client {
 	b.vcMu.RLock()
 	defer b.vcMu.RUnlock()
@@ -82,8 +70,7 @@ func (b *Bot) discordClient() *bot.Client {
 	return b.client
 }
 
-// VoiceStatus reports the bot's current voice connection. The zero value
-// (Connected: false) means no open connection.
+// VoiceStatus is the bot's current voice connection.
 type VoiceStatus struct {
 	Connected   bool
 	GuildID     snowflake.ID
@@ -92,10 +79,7 @@ type VoiceStatus struct {
 	ChannelName string
 }
 
-// Status reports the bot's current voice connection, resolving the guild and
-// channel names from cache when available. Safe to call from any goroutine,
-// including the HTTP server's. The zero value (Connected: false) means no
-// open connection.
+// Status returns the bot's current voice connection.
 func (b *Bot) Status() VoiceStatus {
 	conn := b.voiceConn()
 	if conn == nil {
@@ -171,8 +155,7 @@ func (b *Bot) Start() error {
 	}
 	defer client.Close(context.Background())
 
-	// Stored before the playback goroutine or any event listener could read
-	// it, so Status() never observes a client that's set but not yet ready.
+	// Set before any goroutine that could call Status() starts.
 	b.setClient(client)
 
 	opusaudio.OnError = func(str string, err error) {

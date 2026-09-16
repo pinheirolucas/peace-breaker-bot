@@ -12,9 +12,6 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 )
 
-// fakeVoiceConn is a minimal voice.Conn stand-in — only GuildID/ChannelID
-// are ever read by Status(), everything else exists purely to satisfy the
-// interface.
 type fakeVoiceConn struct {
 	guildID   snowflake.ID
 	channelID snowflake.ID
@@ -39,11 +36,6 @@ func (f *fakeVoiceConn) Close(ctx context.Context)                              
 func (f *fakeVoiceConn) HandleVoiceStateUpdate(update botgateway.EventVoiceStateUpdate)   {}
 func (f *fakeVoiceConn) HandleVoiceServerUpdate(update botgateway.EventVoiceServerUpdate) {}
 
-// TestStatusIsRaceFreeUnderConcurrentSetVoiceConn is the regression guard
-// for b.vc: before vcMu existed, Status() (via voiceConn()) read the field
-// with no synchronization against join.go/leave.go's writes, which
-// `go test -race` flags as a data race. It doesn't need a real Discord
-// connection — just concurrent readers and writers of the guarded field.
 func TestStatusIsRaceFreeUnderConcurrentSetVoiceConn(t *testing.T) {
 	b := &Bot{}
 	b.setClient(&bot.Client{Caches: cache.New()})
@@ -82,9 +74,6 @@ func TestStatusIsRaceFreeUnderConcurrentSetVoiceConn(t *testing.T) {
 	wg.Wait()
 }
 
-// TestStatusReportsDisconnectedByDefault guards the documented zero value:
-// a Bot that never joined a voice channel reports Connected: false with no
-// other fields set.
 func TestStatusReportsDisconnectedByDefault(t *testing.T) {
 	b := &Bot{}
 
@@ -97,11 +86,6 @@ func TestStatusReportsDisconnectedByDefault(t *testing.T) {
 	}
 }
 
-// TestStatusReportsConnectedWithoutCache guards the "cache miss just leaves
-// the name empty" behavior: with a client whose guild/channel caches hold
-// nothing for this connection's IDs, Status still reports
-// Connected/GuildID/ChannelID from the connection itself, just with empty
-// names.
 func TestStatusReportsConnectedWithoutCache(t *testing.T) {
 	b := &Bot{}
 	b.setClient(&bot.Client{Caches: cache.New()})
