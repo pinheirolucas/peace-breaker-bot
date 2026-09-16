@@ -229,6 +229,7 @@ paths:
           required: false
           schema:
             type: string
+            enum: [myinstants, soundboardguy]
             default: myinstants
           description: Which registered provider to list from.
         - name: page

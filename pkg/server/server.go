@@ -17,14 +17,25 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider/myinstants"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider/soundboardguy"
 )
 
 const autodiscoveryServiceName = "_myinstants._tcp"
 
 const defaultProviderKey = "myinstants"
 
-var defaultRegistry = provider.Registry{
-	defaultProviderKey: myinstants.New(),
+var defaultRegistry = newRegistry(
+	myinstants.New(),
+	soundboardguy.New(),
+)
+
+func newRegistry(providers ...provider.Provider) provider.Registry {
+	r := make(provider.Registry, len(providers))
+	for _, p := range providers {
+		r[p.Key()] = p
+	}
+
+	return r
 }
 
 // BotStatus is the bot's voice-connection state, as the server needs it.
