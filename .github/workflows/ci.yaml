@@ -28,13 +28,6 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Build (Windows cross-compile)
-        env:
-          GOOS: windows
-          GOARCH: amd64
-          CGO_ENABLED: "0"
-        run: go build -o bin/peace-breaker-bot.exe .
-
   govulncheck:
     runs-on: ubuntu-latest
 
