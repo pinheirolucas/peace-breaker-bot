@@ -19,9 +19,7 @@ const (
 	key         = "instantsmeme"
 	displayName = "InstantsMeme"
 
-	// Confirmed against both /popular/ and a search: a full page is 40
-	// results.
-	pageSize = 40
+	pageSize = 40 // confirmed against both /popular/ and a search
 )
 
 var defaultClient = httpclient.New()
@@ -58,9 +56,8 @@ func (p *Provider) client() *http.Client {
 	return defaultClient
 }
 
-// List browses /popular/ (no search) or searches by name. Category pages
-// exist but don't actually honor a page query param — /popular/ does, so
-// it's used as the browse endpoint instead.
+// List browses /popular/ (no search) or searches by name; category pages
+// exist but ignore the page query param, so /popular/ is used instead.
 func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error) {
 	page := params.Page
 	if page < 1 {
@@ -91,10 +88,9 @@ func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error
 		return nil, fmt.Errorf("instantsmeme: %w: status %d", provider.ErrBadUpstreamStatus, res.StatusCode)
 	}
 
-	// /popular/ silently redirects an out-of-range page back to page 1
-	// instead of answering 404 — treat a page that didn't survive the
-	// redirect as past the end, the same as a 404, rather than serve page
-	// 1's clips back under the wrong page number.
+	// /popular/ redirects an out-of-range page back to page 1 instead of
+	// 404ing — treat that as past the end, or page 1's clips come back
+	// mislabeled as page N.
 	if page > 1 && search == "" && res.Request != nil && res.Request.URL.Query().Get("page") != strconv.Itoa(page) {
 		return emptyPage(page), nil
 	}

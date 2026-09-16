@@ -161,9 +161,6 @@ func TestListTreatsUpstream404AsEmpty(t *testing.T) {
 	}
 }
 
-// /popular/ answers an out-of-range page by 301-redirecting to page 1
-// instead of 404ing — this must not come back looking like real page-N
-// content.
 func TestListTreatsARedirectedPageAsPastTheEnd(t *testing.T) {
 	p := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		if page := r.URL.Query().Get("page"); page == "" || page == "1" {
