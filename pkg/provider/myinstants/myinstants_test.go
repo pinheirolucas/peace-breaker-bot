@@ -89,7 +89,6 @@ func TestParseListHandlesAPageWithNoResults(t *testing.T) {
 }
 
 func TestParseListPutsAnEmptyPageBeforeItself(t *testing.T) {
-	// An empty page past the end must not report itself as the total.
 	got, err := parseList(strings.NewReader(fixture(t, "search-empty.html")), testBase, 99)
 	if err != nil {
 		t.Fatalf("parseList: %v", err)
@@ -101,7 +100,6 @@ func TestParseListPutsAnEmptyPageBeforeItself(t *testing.T) {
 }
 
 func TestParseListRejectsMismatchedNamesAndLinks(t *testing.T) {
-	// A name with no matching play button — the shape a markup change would take.
 	html := `<a class="instant-link">Orphan</a><a class="instant-link">Another</a>
 	         <button class="small-button" onclick="play('/media/sounds/a.mp3', 'loader-1', 'a-1')"></button>`
 
@@ -222,7 +220,6 @@ func TestListTreatsUpstream404AsEmpty(t *testing.T) {
 }
 
 func TestListSurfacesUpstreamErrorStatus(t *testing.T) {
-	// What Cloudflare answers when the request carries a User-Agent it denies.
 	p := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	})

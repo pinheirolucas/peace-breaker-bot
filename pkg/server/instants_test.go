@@ -10,7 +10,6 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
 )
 
-// fakeProvider is a provider.Provider double for dispatch/envelope tests.
 type fakeProvider struct {
 	key    string
 	result *provider.ListResult
