@@ -81,7 +81,7 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 	player := instant.NewPlayer()
 	defer player.Close()
 
-	b, err := bot.New(token, player, bot.WithOwner(owner), bot.WithLocale(locale))
+	b, err := bot.New(token, player, bot.WithOwner(owner), bot.WithLocale(locale), bot.WithVersion(Version))
 	if err != nil {
 		return fmt.Errorf("failed to create a bot: %w", err)
 	}
