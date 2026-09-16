@@ -110,7 +110,6 @@ func TestParseInstantListRejectsMismatchedNamesAndLinks(t *testing.T) {
 	}
 }
 
-// newTestServer points the scrape at a fixture server instead of myinstants.com.
 func newTestServer(t *testing.T, h http.HandlerFunc) *Server {
 	t.Helper()
 
