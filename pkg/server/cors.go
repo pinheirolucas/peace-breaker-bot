@@ -2,9 +2,6 @@ package server
 
 import "net/http"
 
-// corsMiddleware allows any origin to call the API with GET, POST or a
-// preflight OPTIONS, carrying a Content-Type header. It replaces the single
-// thing gorilla/handlers.CORS was wired up for.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")

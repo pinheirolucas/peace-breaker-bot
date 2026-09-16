@@ -19,7 +19,7 @@ import (
 var cfgFile string
 
 // Version is the build version, set via -ldflags "-X ...cmd.Version=..." at
-// release time. Left at its default for `go build`/`go run` and dev binaries.
+// release time.
 var Version = "dev"
 
 var rootCmd = &cobra.Command{
@@ -31,7 +31,7 @@ var rootCmd = &cobra.Command{
 	RunE:          runRootCmd,
 }
 
-// Execute ...
+// Execute runs the root command, exiting the process on failure.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

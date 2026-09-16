@@ -14,9 +14,7 @@ import (
 type DiscordDispatcher struct {
 	sync.Mutex
 	handlers map[string]*discordHandlerInfo
-	// order tracks registration order so GetHelp lists commands the way
-	// they were registered, rather than Go's randomized map iteration.
-	order []string
+	order    []string
 }
 
 type discordHandlerInfo struct {
@@ -38,9 +36,8 @@ type DiscordContext struct {
 
 type DiscordHandler func(ctx *DiscordContext)
 
-// Register takes a help key into pkg/i18n, not rendered text — the locale to
-// render it in is only known at dispatch time (GetHelp resolves it per call),
-// not at registration time.
+// Register maps cmd to h, described by helpKey — a pkg/i18n key, not
+// rendered text, since GetHelp resolves it into text per call.
 func (d *DiscordDispatcher) Register(cmd string, helpKey string, h DiscordHandler) {
 	d.Lock()
 	if _, exists := d.handlers[cmd]; !exists {

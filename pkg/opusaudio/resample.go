@@ -6,15 +6,11 @@ import (
 )
 
 // Resampler linearly interpolates interleaved, 16-bit little-endian PCM
-// from one sample rate to another, sample by sample, as an io.Reader. It
-// exists because go-mp3 decodes at whatever rate the source mp3 was
-// encoded at (commonly 44.1kHz) while Discord voice requires 48kHz, and
-// pulling in a full resampling library for that one conversion isn't
-// worth the dependency.
+// from one sample rate to another, sample by sample, as an io.Reader.
 type Resampler struct {
 	src      io.Reader
 	channels int
-	ratio    float64 // srcRate / dstRate
+	ratio    float64
 
 	initialized bool
 	eof         bool
@@ -62,8 +58,6 @@ func (r *Resampler) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// nextOutputSample produces the next resampled sample, linearly
-// interpolating between the two nearest source samples.
 func (r *Resampler) nextOutputSample() ([]int16, error) {
 	if r.eof {
 		return nil, io.EOF
@@ -107,8 +101,6 @@ func (r *Resampler) nextOutputSample() ([]int16, error) {
 	return out, nil
 }
 
-// readSourceSample reads exactly one interleaved sample (channels * 2
-// bytes) from src, buffering across short reads.
 func (r *Resampler) readSourceSample() ([]int16, error) {
 	frameBytes := r.channels * 2
 

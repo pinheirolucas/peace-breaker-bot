@@ -1,7 +1,5 @@
 package i18n
 
-// ptBR is transcribed verbatim from the messages this API and bot shipped
-// before this catalog existed.
 var ptBR = map[string]string{
 	"invalid_body":            "Requisição inválida",
 	"invalid_url":             "A URL enviada é inválida",

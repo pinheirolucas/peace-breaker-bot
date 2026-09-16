@@ -1,11 +1,5 @@
-// Package opusaudio decodes cached mp3 clips to PCM with a pure-Go
-// decoder and encodes them to Opus on demand for disgo's voice package.
-//
-// disgo pulls audio rather than accepting a push channel: its AudioSender
-// calls OpusFrameProvider.ProvideOpusFrame() on its own 20ms clock, handling
-// the speaking indicator and silence frames itself. mp3OpusProvider only
-// has to hand back the next encoded frame (or io.EOF once the clip, or a
-// stop signal, ends it).
+// Package opusaudio decodes cached mp3 clips to PCM with a pure-Go decoder
+// and encodes them to Opus frames for disgo's voice package.
 package opusaudio
 
 import (
@@ -19,18 +13,14 @@ import (
 	"github.com/pion/opus"
 )
 
-// Technically the below settings can be adjusted however that poses
-// a lot of other problems that are not handled well at this time.
-// These below values seem to provide the best overall performance
 const (
-	channels  int = 2                   // 1 for mono, 2 for stereo
-	frameRate int = 48000               // audio sampling rate
-	frameSize int = 960                 // uint16 size of each audio frame
-	maxBytes  int = (frameSize * 2) * 2 // max size of opus data
+	channels  int = 2
+	frameRate int = 48000
+	frameSize int = 960
+	maxBytes  int = (frameSize * 2) * 2
 )
 
-// OnError gets called by opusaudio when an error is encountered.
-// By default logs to STDERR
+// OnError is called on decode/encode errors. It logs to stderr by default.
 var OnError = func(str string, err error) {
 	prefix := "opusaudio: " + str
 
@@ -41,9 +31,6 @@ var OnError = func(str string, err error) {
 	}
 }
 
-// mp3OpusProvider implements voice.OpusFrameProvider over an mp3 file
-// decoded to raw PCM and resampled to frameRate, encoding each frame to
-// Opus as disgo's AudioSender pulls it.
 type mp3OpusProvider struct {
 	file    *os.File
 	pcm     *bufio.Reader
@@ -54,9 +41,6 @@ type mp3OpusProvider struct {
 	done      chan struct{}
 }
 
-// newMp3OpusProvider opens filename and decodes it to PCM as it's read.
-// The returned done channel closes once playback ends, naturally or via
-// stop, so callers can block until it's over.
 func newMp3OpusProvider(filename string, stop <-chan bool) (*mp3OpusProvider, <-chan struct{}, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -94,7 +78,6 @@ func newMp3OpusProvider(filename string, stop <-chan bool) (*mp3OpusProvider, <-
 	return p, p.done, nil
 }
 
-// ProvideOpusFrame implements voice.OpusFrameProvider.
 func (p *mp3OpusProvider) ProvideOpusFrame() ([]byte, error) {
 	select {
 	case <-p.stop:
@@ -123,8 +106,6 @@ func (p *mp3OpusProvider) ProvideOpusFrame() ([]byte, error) {
 	return out[:n], nil
 }
 
-// Close implements voice.OpusFrameProvider. disgo calls it when the
-// provider is replaced by a new one or the Conn is closed.
 func (p *mp3OpusProvider) Close() {
 	p.finish()
 }
