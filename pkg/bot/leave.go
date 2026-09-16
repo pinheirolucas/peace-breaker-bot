@@ -11,11 +11,12 @@ import (
 // playback first so the play loop in Start() doesn't keep pulling frames
 // into a connection that's about to close.
 func (b *Bot) leave(ctx *command.DiscordContext) {
-	if b.vc == nil {
+	conn := b.voiceConn()
+	if conn == nil {
 		return
 	}
 
 	b.player.Stop()
-	b.vc.Close(context.Background())
-	b.vc = nil
+	conn.Close(context.Background())
+	b.setVoiceConn(nil)
 }

@@ -40,7 +40,7 @@ func (b *Bot) join(ctx *command.DiscordContext) {
 // the invoking member's voice state) and the invite-link DM handler (which
 // resolves it from a resolved invite instead).
 func (b *Bot) joinVoiceChannel(client *bot.Client, guildID, channelID snowflake.ID, channelName string) {
-	if b.vc != nil {
+	if b.voiceConn() != nil {
 		return
 	}
 
@@ -54,5 +54,5 @@ func (b *Bot) joinVoiceChannel(client *bot.Client, guildID, channelID snowflake.
 		)
 		return
 	}
-	b.vc = conn
+	b.setVoiceConn(conn)
 }
