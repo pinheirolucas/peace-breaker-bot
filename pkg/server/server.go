@@ -18,6 +18,7 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider/myinstants"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider/soundboardguy"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider/soundbuttons"
 )
 
 const autodiscoveryServiceName = "_myinstants._tcp"
@@ -27,6 +28,7 @@ const defaultProviderKey = "myinstants"
 var defaultRegistry = newRegistry(
 	myinstants.New(),
 	soundboardguy.New(),
+	soundbuttons.New(),
 )
 
 func newRegistry(providers ...provider.Provider) provider.Registry {
