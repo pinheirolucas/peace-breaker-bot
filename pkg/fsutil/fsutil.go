@@ -16,6 +16,7 @@ import (
 var (
 	ErrNotFound              = errors.New("resource not found")
 	ErrUnsuportedAudioFormat = errors.New("unduported audio format")
+	ErrUpstreamUnavailable   = errors.New("upstream request failed")
 )
 
 // Cache resolves instant links to files on disk, downloading them on first
@@ -75,7 +76,7 @@ func (c *Cache) Get(link string) (*os.File, error) {
 	case http.StatusNotFound:
 		return nil, ErrNotFound
 	default:
-		return nil, fmt.Errorf("failed to fetch instant: %d", fr.StatusCode)
+		return nil, fmt.Errorf("%w: status %d", ErrUpstreamUnavailable, fr.StatusCode)
 	}
 
 	// Sniffing consumes from fr.Body without putting it back, so the head is

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,16 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
 )
+
+func serverAllowingHost(host string) *Server {
+	return &Server{
+		player:   instant.NewPlayer(),
+		bot:      connectedBotStatus(),
+		registry: provider.Registry{"test": &fakeProvider{key: "test", hosts: []string{host}}},
+	}
+}
 
 type fakeBotStatus struct {
 	status bot.VoiceStatus
@@ -83,7 +93,7 @@ func TestHandleInstantContentReturnsTheClipAsADataURI(t *testing.T) {
 	const link = "https://example.com/a.mp3"
 	seedCache(t, link)
 
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := serverAllowingHost("example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
 	req.SetPathValue("url", link)
@@ -123,7 +133,11 @@ func TestHandleInstantContentReportsAMissingClip(t *testing.T) {
 
 	link := upstream.URL + "/does-not-exist.mp3"
 
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	upstreamHost, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatalf("parsing upstream URL: %v", err)
+	}
+	s := serverAllowingHost(upstreamHost.Hostname())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
 	req.SetPathValue("url", link)
@@ -140,6 +154,70 @@ func TestHandleInstantContentReportsAMissingClip(t *testing.T) {
 	}
 	if data["exists"] != false {
 		t.Errorf("exists = %v, want false", data["exists"])
+	}
+}
+
+func TestHandleInstantContentReportsABadUpstreamStatus(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(upstream.Close)
+
+	previous := fsutil.Default
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	t.Cleanup(func() { fsutil.Default = previous })
+
+	link := upstream.URL + "/a.mp3"
+
+	upstreamHost, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatalf("parsing upstream URL: %v", err)
+	}
+	s := serverAllowingHost(upstreamHost.Hostname())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
+	req.SetPathValue("url", link)
+
+	rec := httptest.NewRecorder()
+	s.handleInstantContent(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadGateway)
+	}
+	if got := decodeBody(t, rec)["label"]; got != "bad_http_status" {
+		t.Errorf("label = %v, want bad_http_status", got)
+	}
+}
+
+func TestHandleInstantContentRejectsNonMp3Content(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not an mp3 file"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	previous := fsutil.Default
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	t.Cleanup(func() { fsutil.Default = previous })
+
+	link := upstream.URL + "/a.mp3"
+
+	upstreamHost, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatalf("parsing upstream URL: %v", err)
+	}
+	s := serverAllowingHost(upstreamHost.Hostname())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
+	req.SetPathValue("url", link)
+
+	rec := httptest.NewRecorder()
+	s.handleInstantContent(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := decodeBody(t, rec)["label"]; got != "unsuported_audio_format" {
+		t.Errorf("label = %v, want unsuported_audio_format", got)
 	}
 }
 

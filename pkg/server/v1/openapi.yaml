@@ -163,8 +163,13 @@ paths:
         Downloads/caches the clip at `url` (same cache `POST /api/v1/bot/play`
         uses) and returns it inline, without touching the bot or its voice
         connection. Meant for local preview in the UI. `url` is the clip's
-        full myinstants.com URL, percent-encoded into this single path
-        segment (e.g. `:` becomes `%3A`, `/` becomes `%2F`).
+        full URL, percent-encoded into this single path segment (e.g. `:`
+        becomes `%3A`, `/` becomes `%2F`). `url`'s host must be one of the
+        registered providers' declared content hosts (see `GET
+        /api/v1/providers`) — a URL that doesn't decode to a usable URL at
+        all, and a URL on a host no registered provider recognizes, answer
+        the same `invalid_url` 400, so a disallowed host can't be
+        distinguished from a malformed one.
       parameters:
         - name: url
           in: path
@@ -172,7 +177,7 @@ paths:
           schema:
             type: string
             format: uri
-          description: The myinstants.com clip URL to fetch, percent-encoded.
+          description: The clip URL to fetch, percent-encoded. Must be on a host some registered provider serves clips from.
       responses:
         "200":
           description: The clip resolved, or it didn't — see `data.exists`.
@@ -188,7 +193,7 @@ paths:
                   summary: Clip could not be resolved
                   value: { data: { exists: false } }
         "400":
-          description: The path segment didn't decode to a usable URL.
+          description: The path segment didn't decode to a usable URL, or its host isn't one any registered provider allows.
           content:
             application/json:
               schema:
@@ -196,6 +201,15 @@ paths:
               examples:
                 invalidUrl:
                   value: { label: invalid_url, message: "That URL isn't valid" }
+        "422":
+          description: The downloaded file did not sniff as mp3.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                unsupportedAudioFormat:
+                  value: { label: unsuported_audio_format, message: "That instant isn't an audio format we can play" }
         "500":
           description: Anything else.
           content:
@@ -205,22 +219,42 @@ paths:
               examples:
                 unknownError:
                   value: { label: unknown_error, message: "Something went wrong. Try again in a moment" }
+        "502":
+          description: url's host answered with a status other than 200/404 (e.g. an access-denied response from the CDN).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                badHttpStatus:
+                  value: { label: bad_http_status, message: "That provider's site answered with an error" }
 
   /api/v1/instants:
     get:
       operationId: listInstants
-      summary: List or search myinstants.com clips
+      summary: List or search a provider's clips
       description: |
-        Either browses a region's index (no `search`) or searches by name
-        (`search`, which ignores `region`). `pages` is inferred from how
-        many instants came back on this page, since myinstants.com's
-        listing pages no longer carry a pager: a full page (36 instants)
-        means there may be another, a short page means this is the last
-        one, and an empty page means the caller paged past the end — that
-        last case is normalized into the same collection shape as a normal
-        result (`instants: []` plus the last valid `pages`), never a bare
-        empty array.
+        Lists clips from one provider's site — `myinstants` (the default,
+        for backward compatibility) or another registered provider key.
+        Either browses (no `search`) or searches by name (`search`, which
+        ignores `region` — only `myinstants` has a concept of region at
+        all; other providers silently ignore it rather than erroring).
+        `pages` is inferred from how many instants came back on this page,
+        since none of these sites' listing pages carry a real pager: a full
+        page means there may be another, a short page means this is the
+        last one, and an empty page means the caller paged past the end —
+        that last case is normalized into the same collection shape as a
+        normal result (`instants: []` plus the last valid `pages`), never a
+        bare empty array.
       parameters:
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [myinstants, soundboardguy, soundbuttons]
+            default: myinstants
+          description: Which registered provider to list from.
         - name: page
           in: query
           required: false
@@ -234,7 +268,7 @@ paths:
           required: false
           schema:
             type: string
-          description: Search term. When set, region is ignored.
+          description: Search term. When set on myinstants, region is ignored.
         - name: region
           in: query
           required: false
@@ -242,7 +276,7 @@ paths:
             type: string
             pattern: "^[a-z]{2}$"
             default: us
-          description: Two-letter region code, case-insensitive. Ignored when search is set.
+          description: Two-letter region code, case-insensitive. Only honored by the myinstants provider; other providers ignore it.
       responses:
         "200":
           description: One or more matches, or a search paged past its end.
@@ -270,30 +304,63 @@ paths:
               examples:
                 invalidRegion:
                   value: { label: invalid_region, message: "That region code isn't valid" }
+        "404":
+          description: provider did not match a registered provider key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                providerNotFound:
+                  value: { label: provider_not_found, message: "That provider isn't recognized" }
         "500":
-          description: The scrape found a different number of names and play links (markup likely changed), or anything else unexpected.
+          description: The scrape found an unexpected markup shape (the site's layout likely changed), or anything else unexpected.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 nameLinkNotMatched:
-                  value: { label: name_link_not_matched, message: "myinstants.com's results couldn't be read — their page layout may have changed" }
+                  value: { label: name_link_not_matched, message: "That provider's results couldn't be read — its page layout may have changed" }
                 unknownError:
                   value: { label: unknown_error, message: "Something went wrong. Try again in a moment" }
         "502":
-          description: myinstants.com could not be reached, or answered with a bad status.
+          description: The provider's site could not be reached, or answered with a bad status.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 httpRequest:
-                  summary: Could not reach myinstants.com
-                  value: { label: http_request, message: "Couldn't reach myinstants.com" }
+                  summary: Could not reach the provider's site
+                  value: { label: http_request, message: "Couldn't reach that provider's site" }
                 badHttpStatus:
-                  summary: myinstants.com answered a non-200/404 status
-                  value: { label: bad_http_status, message: "myinstants.com answered with an error" }
+                  summary: The provider's site answered a non-200/404 status
+                  value: { label: bad_http_status, message: "That provider's site answered with an error" }
+
+  /api/v1/providers:
+    get:
+      operationId: listProviders
+      summary: List the registered clip providers
+      description: |
+        Static-ish list a UI can build a provider picker from, instead of
+        hardcoding provider keys client-side. `key` is what `GET
+        /api/v1/instants`'s `provider` query param takes. `supportsRegion`
+        tells a client whether to show a region field for that provider —
+        currently only `myinstants` does anything with it.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderListSuccessEnvelope"
+              examples:
+                results:
+                  value:
+                    data:
+                      - { key: myinstants, name: MyInstants, supportsSearch: true, supportsRegion: true }
+                      - { key: soundboardguy, name: SoundboardGuy, supportsSearch: true, supportsRegion: false }
+                      - { key: soundbuttons, name: Sound Buttons, supportsSearch: true, supportsRegion: false }
 
   /api/v1/openapi.yaml:
     get:
@@ -429,3 +496,28 @@ components:
                   description: Always present, even when empty (e.g. a search paged past its end).
                 pages:
                   type: integer
+
+    Provider:
+      type: object
+      properties:
+        key:
+          type: string
+          description: What GET /api/v1/instants's provider query param takes to select this provider.
+        name:
+          type: string
+        supportsSearch:
+          type: boolean
+        supportsRegion:
+          type: boolean
+          description: Whether GET /api/v1/instants's region query param does anything for this provider.
+
+    ProviderListSuccessEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Provider"

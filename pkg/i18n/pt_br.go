@@ -6,9 +6,10 @@ var ptBR = map[string]string{
 	"instant_not_found":       "O instant enviado não foi encontrado",
 	"unsuported_audio_format": "O formato de áudio do instant enviado não é suportado",
 	"invalid_region":          "A região enviada é inválida",
-	"http_request":            "Ocorreu um erro ao se comunicar com o site myinstants.com",
-	"bad_http_status":         "O site myinstants.com respondeu com um status de erro",
-	"name_link_not_matched":   "A quantidade de links e botões não coincide",
+	"provider_not_found":      "Esse provedor não é reconhecido",
+	"http_request":            "Ocorreu um erro ao se comunicar com o site do provedor",
+	"bad_http_status":         "O site do provedor respondeu com um status de erro",
+	"name_link_not_matched":   "Os resultados do provedor não puderam ser lidos — o layout da página pode ter mudado",
 	"unknown_error":           "Erro desconhecido, tente novamente mais tarde",
 	"bot_not_connected":       "O bot ainda não está em um canal de voz — use !join no canal que você quer.",
 

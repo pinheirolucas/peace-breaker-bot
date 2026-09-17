@@ -4,26 +4,43 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"regexp"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/text/language"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
-	"github.com/pinheirolucas/peace-breaker-bot/pkg/httpclient"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/i18n"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider/myinstants"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider/soundboardguy"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider/soundbuttons"
 )
 
 const autodiscoveryServiceName = "_myinstants._tcp"
 
-var defaultClient = httpclient.New()
+const defaultProviderKey = "myinstants"
+
+var defaultRegistry = newRegistry(
+	myinstants.New(),
+	soundboardguy.New(),
+	soundbuttons.New(),
+)
+
+func newRegistry(providers ...provider.Provider) provider.Registry {
+	r := make(provider.Registry, len(providers))
+	for _, p := range providers {
+		r[p.Key()] = p
+	}
+
+	return r
+}
 
 // BotStatus is the bot's voice-connection state, as the server needs it.
 type BotStatus interface {
@@ -34,28 +51,19 @@ type Server struct {
 	player *instant.Player
 	bot    BotStatus
 
-	myInstantsBaseURL string
-	client            *http.Client
+	registry provider.Registry
 }
 
 func New(player *instant.Player, bot BotStatus) *Server {
 	return &Server{player: player, bot: bot}
 }
 
-func (s *Server) baseURL() string {
-	if s.myInstantsBaseURL != "" {
-		return s.myInstantsBaseURL
+func (s *Server) providers() provider.Registry {
+	if s.registry != nil {
+		return s.registry
 	}
 
-	return "https://www.myinstants.com"
-}
-
-func (s *Server) httpClient() *http.Client {
-	if s.client != nil {
-		return s.client
-	}
-
-	return defaultClient
+	return defaultRegistry
 }
 
 func (s *Server) Start(address string) error {
@@ -66,6 +74,7 @@ func (s *Server) Start(address string) error {
 	r.HandleFunc("GET /api/v1/bot/status", s.handleBotStatus)
 	r.HandleFunc("GET /api/v1/instants", s.handleListInstants)
 	r.HandleFunc("GET /api/v1/instants/{url}/content", s.handleInstantContent)
+	r.HandleFunc("GET /api/v1/providers", s.handleListProviders)
 	r.HandleFunc("GET /api/v1/openapi.yaml", s.handleOpenAPISpec)
 	r.HandleFunc("GET /api/docs", s.handleDocs)
 
@@ -192,22 +201,81 @@ func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
 	writeSuccessResponse(w, out)
 }
 
+func (s *Server) allowedContentHosts() map[string]struct{} {
+	hosts := make(map[string]struct{})
+	for _, p := range s.providers() {
+		for _, h := range p.AllowedContentHosts() {
+			hosts[strings.ToLower(h)] = struct{}{}
+		}
+	}
+
+	return hosts
+}
+
 func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 	lang := languageFor(r)
 
-	url := r.PathValue("url")
-	if !instant.IsLinkValid(url) {
+	rawURL := r.PathValue("url")
+	if !instant.IsLinkValid(rawURL) {
 		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
 		return
 	}
 
-	info, err := instant.GetPlayable(url)
+	parsed, err := url.Parse(rawURL)
 	if err != nil {
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
+		return
+	}
+	if _, ok := s.allowedContentHosts()[strings.ToLower(parsed.Hostname())]; !ok {
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
+		return
+	}
+
+	info, err := instant.GetPlayable(rawURL)
+	switch {
+	case err == nil:
+	case errors.Is(err, fsutil.ErrUnsuportedAudioFormat):
+		writeErrorMessage(w, http.StatusUnprocessableEntity, lang, "unsuported_audio_format")
+		return
+	case errors.Is(err, fsutil.ErrUpstreamUnavailable):
+		writeErrorMessage(w, http.StatusBadGateway, lang, "bad_http_status")
+		return
+	default:
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}
 
 	writeSuccessResponse(w, info)
+}
+
+type providerInfo struct {
+	Key            string `json:"key"`
+	Name           string `json:"name"`
+	SupportsSearch bool   `json:"supportsSearch"`
+	SupportsRegion bool   `json:"supportsRegion"`
+}
+
+func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
+	registry := s.providers()
+
+	keys := make([]string, 0, len(registry))
+	for key := range registry {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	out := make([]providerInfo, 0, len(keys))
+	for _, key := range keys {
+		p := registry[key]
+		out = append(out, providerInfo{
+			Key:            p.Key(),
+			Name:           p.DisplayName(),
+			SupportsSearch: true,
+			SupportsRegion: p.SupportsRegion(),
+		})
+	}
+
+	writeSuccessResponse(w, out)
 }
 
 type instantButton struct {
@@ -220,83 +288,27 @@ type instantListResponse struct {
 	Pages    int              `json:"pages"`
 }
 
-const pageSize = 36
-
-const defaultRegion = "us"
-
-var (
-	errNameLinkMismatch = errors.New("names and links count do not match")
-
-	playURLPattern = regexp.MustCompile(`play\(\s*'([^']+)'`)
-	regionPattern  = regexp.MustCompile(`^[a-z]{2}$`)
-)
-
-func totalPages(page, count int) int {
-	switch {
-	case count >= pageSize:
-		return page + 1
-	case count > 0:
-		return page
-	default:
-		return max(1, page-1)
-	}
-}
-
-func parseInstantList(r io.Reader, baseURL string, page int) (*instantListResponse, error) {
-	document, err := goquery.NewDocumentFromReader(r)
-	if err != nil {
-		return nil, err
+func toInstantListResponse(list *provider.ListResult) *instantListResponse {
+	instants := make([]*instantButton, 0, len(list.Instants))
+	for _, i := range list.Instants {
+		instants = append(instants, &instantButton{Name: i.Name, URL: i.URL})
 	}
 
-	names := []string{}
-	links := []string{}
-
-	document.Find(".instant-link").Each(func(i int, anchor *goquery.Selection) {
-		names = append(names, anchor.Text())
-	})
-
-	document.Find(".small-button").Each(func(i int, button *goquery.Selection) {
-		onclick, ok := button.Attr("onclick")
-		if !ok {
-			return
-		}
-
-		match := playURLPattern.FindStringSubmatch(onclick)
-		if match == nil {
-			return
-		}
-
-		links = append(links, baseURL+match[1])
-	})
-
-	if len(names) != len(links) {
-		return nil, errNameLinkMismatch
-	}
-
-	instants := []*instantButton{}
-	for i, name := range names {
-		instants = append(instants, &instantButton{
-			Name: name,
-			URL:  links[i],
-		})
-	}
-
-	return &instantListResponse{
-		Instants: instants,
-		Pages:    totalPages(page, len(instants)),
-	}, nil
+	return &instantListResponse{Instants: instants, Pages: list.Pages}
 }
 
 func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 	lang := languageFor(r)
 	vars := r.URL.Query()
 
-	region := strings.ToLower(strings.TrimSpace(vars.Get("region")))
-	if region == "" {
-		region = defaultRegion
+	providerKey := strings.TrimSpace(vars.Get("provider"))
+	if providerKey == "" {
+		providerKey = defaultProviderKey
 	}
-	if !regionPattern.MatchString(region) {
-		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_region")
+
+	p, ok := s.providers().Get(providerKey)
+	if !ok {
+		writeErrorMessage(w, http.StatusNotFound, lang, "provider_not_found")
 		return
 	}
 
@@ -305,47 +317,32 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 
-	var url string
-	search := strings.Replace(strings.TrimSpace(vars.Get("search")), " ", "+", -1)
-	if search != "" {
-		url = s.baseURL() + "/search/?page=" + strconv.Itoa(page) + "&name=" + search
-	} else {
-		url = s.baseURL() + "/en/index/" + region + "/?page=" + strconv.Itoa(page)
-	}
-
-	response, err := s.httpClient().Get(url)
-	if err != nil {
-		slog.Error("http.Get", "err", err)
+	list, err := p.List(provider.ListParams{
+		Page:   page,
+		Search: strings.TrimSpace(vars.Get("search")),
+		Region: strings.TrimSpace(vars.Get("region")),
+	})
+	switch {
+	case err == nil:
+	case errors.Is(err, provider.ErrInvalidRegion):
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_region")
+		return
+	case errors.Is(err, provider.ErrUpstreamUnavailable):
+		slog.Error("provider.List", "provider", providerKey, "err", err)
 		writeErrorMessage(w, http.StatusBadGateway, lang, "http_request")
 		return
-	}
-	defer response.Body.Close()
-
-	switch response.StatusCode {
-	case http.StatusOK:
-	case http.StatusNotFound:
-		writeSuccessResponse(w, &instantListResponse{
-			Instants: []*instantButton{},
-			Pages:    totalPages(page, 0),
-		})
-		return
-	default:
-		slog.Error("Bad http status", "StatusCode", response.StatusCode)
+	case errors.Is(err, provider.ErrBadUpstreamStatus):
+		slog.Error("provider.List", "provider", providerKey, "err", err)
 		writeErrorMessage(w, http.StatusBadGateway, lang, "bad_http_status")
 		return
-	}
-
-	list, err := parseInstantList(response.Body, s.baseURL(), page)
-	switch err {
-	case nil:
-	case errNameLinkMismatch:
+	case errors.Is(err, provider.ErrUnexpectedMarkup):
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "name_link_not_matched")
 		return
 	default:
-		slog.Error("parseInstantList", "err", err)
+		slog.Error("provider.List", "provider", providerKey, "err", err)
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}
 
-	writeSuccessResponse(w, list)
+	writeSuccessResponse(w, toInstantListResponse(list))
 }
