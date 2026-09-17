@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,8 +13,18 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/privdrop"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/server"
+)
+
+// defaultContainerUID/GID match the UID/GID the Docker image ran as before
+// it started dropping privileges at runtime, so an operator who sets
+// neither PUID nor PGID sees the same effective permissions as before.
+const (
+	defaultContainerUID = 65532
+	defaultContainerGID = 65532
 )
 
 var cfgFile string
@@ -58,6 +69,10 @@ func init() {
 }
 
 func runRootCmd(cmd *cobra.Command, args []string) error {
+	if err := dropPrivileges(); err != nil {
+		return fmt.Errorf("failed to drop privileges: %w", err)
+	}
+
 	token := viper.GetString("bot.token")
 	if strings.TrimSpace(token) == "" {
 		return errors.New("bot token not provided")
@@ -106,6 +121,52 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 	time.Sleep(time.Second * 3)
 
 	return nil
+}
+
+// dropPrivileges chowns the instant cache dir to PUID/PGID (both read
+// straight from the environment, not through Viper, since they're Docker
+// plumbing rather than app config) and permanently drops the process to
+// that uid/gid. It's a no-op outside a root-started container — see
+// pkg/privdrop.
+func dropPrivileges() error {
+	dir, err := fsutil.GetCacheDirOrCreate()
+	if err != nil {
+		return fmt.Errorf("failed to prepare cache dir: %w", err)
+	}
+
+	uid, err := envIntOrDefault("PUID", defaultContainerUID)
+	if err != nil {
+		return err
+	}
+
+	gid, err := envIntOrDefault("PGID", defaultContainerGID)
+	if err != nil {
+		return err
+	}
+
+	dropped, err := privdrop.DropTo(dir, uid, gid)
+	if err != nil {
+		return err
+	}
+	if dropped {
+		slog.Info("dropped privileges", "uid", uid, "gid", gid, "dir", dir)
+	}
+
+	return nil
+}
+
+func envIntOrDefault(key string, def int) (int, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return def, nil
+	}
+
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+
+	return n, nil
 }
 
 func initConfig() {
