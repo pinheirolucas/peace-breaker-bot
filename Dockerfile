@@ -23,8 +23,11 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifi
 COPY --from=builder /out/peace-breaker-bot /peace-breaker-bot
 
 ENV HOME=/home/app
-USER 65532:65532
 
+# Starts as root: the binary itself chowns /home/app/.instants to
+# PUID/PGID (default 65532:65532, see pkg/privdrop) and drops to it before
+# doing anything else, so a freshly-mounted volume never needs to be
+# pre-created or chowned by hand.
 VOLUME /home/app/.instants
 EXPOSE 9001
 
