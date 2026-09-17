@@ -79,12 +79,39 @@ func TestParseListHandlesAPageWithNoResults(t *testing.T) {
 }
 
 func TestParseListFailsLoudOnAButtonMissingTitle(t *testing.T) {
-	html := `<button class="sound-btn" data-src="https://cdn.instants.meme/a.mp3"></button>`
+	html := `<div class="instants-pvh">
+		<button class="sound-btn" data-src="https://cdn.instants.meme/a.mp3"></button>
+	</div>`
 
 	_, err := parseList(strings.NewReader(html), 1)
 
 	if !errors.Is(err, provider.ErrUnexpectedMarkup) {
 		t.Errorf("err = %v, want provider.ErrUnexpectedMarkup", err)
+	}
+}
+
+func TestParseListIgnoresTheShareModalTemplateButton(t *testing.T) {
+	html := `<div class="instants-pvh">
+		<div class="sound-item">
+			<button class="sound-button-wrapper hand position-relative sound-btn hand p-0"
+			        data-src="https://cdn.instants.meme/2026/01/18/vine-boom-sound.mp3"
+			        title="VINE BOOM SOUND"></button>
+		</div>
+	</div>
+	<div id="modalShare" class="modal-wrapper">
+		<button class="sound-btn" data-src="" title="Play sound meme"></button>
+	</div>`
+
+	got, err := parseList(strings.NewReader(html), 1)
+	if err != nil {
+		t.Fatalf("parseList: %v", err)
+	}
+
+	if len(got.Instants) != 1 {
+		t.Fatalf("got %d instants, want 1: %+v", len(got.Instants), got.Instants)
+	}
+	if got.Instants[0].Name != "VINE BOOM SOUND" {
+		t.Errorf("Instants[0] = %+v", got.Instants[0])
 	}
 }
 
@@ -107,8 +134,14 @@ func TestListBrowsesPopular(t *testing.T) {
 	if _, err := p.List(provider.ListParams{}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
+	if want := "/popular/"; gotPath != want {
+		t.Errorf("upstream path = %q, want %q", gotPath, want)
+	}
 
-	if want := "/popular/?page=1"; gotPath != want {
+	if _, err := p.List(provider.ListParams{Page: 3}); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if want := "/popular/page/3/"; gotPath != want {
 		t.Errorf("upstream path = %q, want %q", gotPath, want)
 	}
 }
@@ -140,7 +173,7 @@ func TestListIgnoresRegion(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	if want := "/popular/?page=1"; gotPath != want {
+	if want := "/popular/"; gotPath != want {
 		t.Errorf("upstream path = %q, want %q — region should be ignored", gotPath, want)
 	}
 }
@@ -161,26 +194,21 @@ func TestListTreatsUpstream404AsEmpty(t *testing.T) {
 	}
 }
 
-func TestListTreatsARedirectedPageAsPastTheEnd(t *testing.T) {
+func TestListTreatsAPageWithNoListingAsPastTheEnd(t *testing.T) {
 	p := newTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-		if page := r.URL.Query().Get("page"); page == "" || page == "1" {
-			w.Write([]byte(fixture(t, "search-full.html")))
-			return
-		}
-
-		http.Redirect(w, r, "/popular/", http.StatusMovedPermanently)
+		w.Write([]byte(fixture(t, "search-empty.html")))
 	})
 
-	got, err := p.List(provider.ListParams{Page: 5})
+	got, err := p.List(provider.ListParams{Page: 999})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
 	if len(got.Instants) != 0 {
-		t.Errorf("got %d instants, want none (redirected past the end)", len(got.Instants))
+		t.Errorf("got %d instants, want none", len(got.Instants))
 	}
-	if got.Pages != 4 {
-		t.Errorf("Pages = %d, want 4", got.Pages)
+	if got.Pages != 998 {
+		t.Errorf("Pages = %d, want 998", got.Pages)
 	}
 }
 

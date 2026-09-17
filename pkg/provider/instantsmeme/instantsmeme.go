@@ -67,10 +67,13 @@ func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error
 	search := strings.TrimSpace(params.Search)
 
 	var listURL string
-	if search != "" {
+	switch {
+	case search != "":
 		listURL = p.baseURL() + "/?s=" + url.QueryEscape(search) + "&paged=" + strconv.Itoa(page)
-	} else {
-		listURL = p.baseURL() + "/popular/?page=" + strconv.Itoa(page)
+	case page == 1:
+		listURL = p.baseURL() + "/popular/"
+	default:
+		listURL = p.baseURL() + "/popular/page/" + strconv.Itoa(page) + "/"
 	}
 
 	res, err := p.client().Get(listURL)
@@ -85,13 +88,6 @@ func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error
 		return emptyPage(page), nil
 	default:
 		return nil, fmt.Errorf("instantsmeme: %w: status %d", provider.ErrBadUpstreamStatus, res.StatusCode)
-	}
-
-	// /popular/ redirects an out-of-range page back to page 1 instead of
-	// 404ing — treat that as past the end, or page 1's clips come back
-	// mislabeled as page N.
-	if page > 1 && search == "" && res.Request != nil && res.Request.URL.Query().Get("page") != strconv.Itoa(page) {
-		return emptyPage(page), nil
 	}
 
 	return parseList(res.Body, page)
@@ -113,7 +109,7 @@ func parseList(r io.Reader, page int) (*provider.ListResult, error) {
 	instants := []provider.Instant{}
 	malformed := 0
 
-	document.Find("button.sound-btn[data-src]").Each(func(i int, btn *goquery.Selection) {
+	document.Find(".instants-pvh button.sound-btn[data-src]").Each(func(i int, btn *goquery.Selection) {
 		src, hasSrc := btn.Attr("data-src")
 		name, hasTitle := btn.Attr("title")
 		if !hasSrc || !hasTitle || src == "" || name == "" {
