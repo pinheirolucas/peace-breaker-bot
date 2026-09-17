@@ -232,7 +232,15 @@ func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	info, err := instant.GetPlayable(rawURL)
-	if err != nil {
+	switch {
+	case err == nil:
+	case errors.Is(err, fsutil.ErrUnsuportedAudioFormat):
+		writeErrorMessage(w, http.StatusUnprocessableEntity, lang, "unsuported_audio_format")
+		return
+	case errors.Is(err, fsutil.ErrUpstreamUnavailable):
+		writeErrorMessage(w, http.StatusBadGateway, lang, "bad_http_status")
+		return
+	default:
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}

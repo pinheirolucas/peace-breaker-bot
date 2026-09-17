@@ -201,6 +201,15 @@ paths:
               examples:
                 invalidUrl:
                   value: { label: invalid_url, message: "That URL isn't valid" }
+        "422":
+          description: The downloaded file did not sniff as mp3.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                unsupportedAudioFormat:
+                  value: { label: unsuported_audio_format, message: "That instant isn't an audio format we can play" }
         "500":
           description: Anything else.
           content:
@@ -210,6 +219,15 @@ paths:
               examples:
                 unknownError:
                   value: { label: unknown_error, message: "Something went wrong. Try again in a moment" }
+        "502":
+          description: url's host answered with a status other than 200/404 (e.g. an access-denied response from the CDN).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                badHttpStatus:
+                  value: { label: bad_http_status, message: "That provider's site answered with an error" }
 
   /api/v1/instants:
     get:

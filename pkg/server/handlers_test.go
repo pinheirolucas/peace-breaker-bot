@@ -157,6 +157,70 @@ func TestHandleInstantContentReportsAMissingClip(t *testing.T) {
 	}
 }
 
+func TestHandleInstantContentReportsABadUpstreamStatus(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(upstream.Close)
+
+	previous := fsutil.Default
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	t.Cleanup(func() { fsutil.Default = previous })
+
+	link := upstream.URL + "/a.mp3"
+
+	upstreamHost, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatalf("parsing upstream URL: %v", err)
+	}
+	s := serverAllowingHost(upstreamHost.Hostname())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
+	req.SetPathValue("url", link)
+
+	rec := httptest.NewRecorder()
+	s.handleInstantContent(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadGateway)
+	}
+	if got := decodeBody(t, rec)["label"]; got != "bad_http_status" {
+		t.Errorf("label = %v, want bad_http_status", got)
+	}
+}
+
+func TestHandleInstantContentRejectsNonMp3Content(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not an mp3 file"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	previous := fsutil.Default
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	t.Cleanup(func() { fsutil.Default = previous })
+
+	link := upstream.URL + "/a.mp3"
+
+	upstreamHost, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatalf("parsing upstream URL: %v", err)
+	}
+	s := serverAllowingHost(upstreamHost.Hostname())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
+	req.SetPathValue("url", link)
+
+	rec := httptest.NewRecorder()
+	s.handleInstantContent(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := decodeBody(t, rec)["label"]; got != "unsuported_audio_format" {
+		t.Errorf("label = %v, want unsuported_audio_format", got)
+	}
+}
+
 func TestHandleBotPlayRejectsAnInvalidBody(t *testing.T) {
 	s := New(instant.NewPlayer(), connectedBotStatus())
 

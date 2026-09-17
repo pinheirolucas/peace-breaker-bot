@@ -2,6 +2,7 @@ package fsutil
 
 import (
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -114,12 +115,12 @@ func TestGetSurfacesOtherStatusCodes(t *testing.T) {
 
 	_, err := c.Get(base + "/a.mp3")
 
-	if err == nil {
-		t.Fatal("expected an error for a 403 response")
+	if !errors.Is(err, ErrUpstreamUnavailable) {
+		t.Errorf("err = %v, want ErrUpstreamUnavailable", err)
 	}
 	for _, e := range []error{ErrNotFound, ErrUnsuportedAudioFormat} {
-		if err == e {
-			t.Errorf("err = %v, want a generic fetch error rather than a sentinel", err)
+		if errors.Is(err, e) {
+			t.Errorf("err = %v, want ErrUpstreamUnavailable rather than %v", err, e)
 		}
 	}
 }
