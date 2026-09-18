@@ -12,7 +12,8 @@ var ErrInvalidLink = errors.New("invalid link")
 type Player struct {
 	sync.Mutex
 
-	playing bool
+	playing    bool
+	generation uint64
 
 	playChan     chan string
 	endChan      chan bool
@@ -40,15 +41,27 @@ func (p *Player) Play(link string) (string, error) {
 		return "", ErrInvalidLink
 	}
 
+	p.Stop()
+
+	p.Lock()
+	p.generation++
+	gen := p.generation
+	p.Unlock()
+
 	f, err := fsutil.GetFromCache(link)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
 
-	p.Stop()
-
 	p.Lock()
+	if p.generation != gen {
+		// A Stop (or a Play that superseded this one) arrived while the clip
+		// was still downloading, before there was anything on StopChan to
+		// interrupt — report it the same way an interrupted playback would.
+		p.Unlock()
+		return "stop", nil
+	}
 	p.playing = true
 	p.Unlock()
 
@@ -76,6 +89,10 @@ func (p *Player) claimNotPlaying() bool {
 }
 
 func (p *Player) Stop() {
+	p.Lock()
+	p.generation++
+	p.Unlock()
+
 	if !p.claimNotPlaying() {
 		return
 	}
