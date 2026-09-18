@@ -3,10 +3,14 @@ package instant
 import (
 	"crypto/md5"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 )
 
 // Play resolves the link through fsutil.GetFromCache, which returns the cached
@@ -157,6 +161,52 @@ func TestStopMidPlaybackReturnsStopAndSignalsStopChan(t *testing.T) {
 	}
 	if r := waitFor(t, reason); r != "stop" {
 		t.Errorf("Play returned %q, want \"stop\"", r)
+	}
+}
+
+// A Stop that arrives while a not-yet-cached clip is still downloading has
+// nothing to publish to StopChan — playing is still false, since Play only
+// flips it once the download finishes. Without a generation check, Play
+// would sail past that Stop and start the clip anyway once the download
+// completed, which is exactly what big/uncached clips were doing.
+func TestPlayAbortsWhenStoppedWhileDownloading(t *testing.T) {
+	p := NewPlayer()
+	defer p.Close()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	reached := make(chan struct{})
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(reached)
+		<-release
+		_, _ = w.Write([]byte("ID3 not really an mp3 but it sniffs as one"))
+	}))
+	defer srv.Close()
+
+	origClient := fsutil.Default.Client
+	fsutil.Default.Client = srv.Client()
+	defer func() { fsutil.Default.Client = origClient }()
+
+	reason, errc := playAsync(p, srv.URL+"/big.mp3")
+
+	<-reached // the download is now in flight; playing is still false
+	p.Stop()
+	close(release) // let the download finish
+
+	if err := <-errc; err != nil {
+		t.Fatalf("Play returned error: %v", err)
+	}
+	if r := waitFor(t, reason); r != "stop" {
+		t.Errorf("Play returned %q, want %q", r, "stop")
+	}
+
+	select {
+	case path := <-p.playChan:
+		t.Fatalf("Play pushed %q to playChan after being stopped mid-download", path)
+	default:
 	}
 }
 
