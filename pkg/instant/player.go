@@ -1,44 +1,120 @@
 package instant
 
 import (
+	"context"
 	"errors"
 	"sync"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 )
 
-var ErrInvalidLink = errors.New("invalid link")
+const (
+	reasonEnd  = "end"
+	reasonStop = "stop"
+)
 
+var (
+	ErrInvalidLink = errors.New("invalid link")
+	ErrClosed      = errors.New("player closed")
+
+	errSuperseded = errors.New("superseded by a newer request")
+)
+
+// Playback is a single clip handed to the consumer by Player.Next.
+type Playback struct {
+	player *Player
+	path   string
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan struct{}
+	reason string
+	once   sync.Once
+}
+
+func newPlayback(player *Player, path string) *Playback {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	return &Playback{
+		player: player,
+		path:   path,
+		ctx:    ctx,
+		cancel: cancel,
+		done:   make(chan struct{}),
+	}
+}
+
+// Path is the cached file to play.
+func (pb *Playback) Path() string {
+	return pb.path
+}
+
+// Context is cancelled when the playback is stopped or replaced.
+func (pb *Playback) Context() context.Context {
+	return pb.ctx
+}
+
+// End reports that the consumer is done with the playback. It has no effect
+// on a playback that was already stopped.
+func (pb *Playback) End() {
+	pb.player.release(pb)
+	pb.finish(reasonEnd)
+}
+
+func (pb *Playback) stop() {
+	pb.finish(reasonStop)
+}
+
+func (pb *Playback) finish(reason string) {
+	pb.once.Do(func() {
+		pb.reason = reason
+		close(pb.done)
+		pb.cancel()
+	})
+}
+
+// Player plays one clip at a time. A newer Play replaces the current clip.
 type Player struct {
-	sync.Mutex
+	mu      sync.Mutex
+	seq     uint64
+	floor   uint64
+	current *Playback
+	pending *Playback
 
-	playing bool
-
-	playChan     chan string
-	endChan      chan bool
-	internalStop chan bool
-	StopChan     chan bool
+	wake chan struct{}
+	quit chan struct{}
 }
 
 func NewPlayer() *Player {
 	return &Player{
-		playChan:     make(chan string, 1),
-		endChan:      make(chan bool, 1),
-		internalStop: make(chan bool, 1),
-		StopChan:     make(chan bool, 1),
+		wake: make(chan struct{}, 1),
+		quit: make(chan struct{}),
 	}
 }
 
+// Close stops the current clip and releases every blocked Play and Next.
 func (p *Player) Close() {
-	close(p.playChan)
-	close(p.endChan)
-	close(p.StopChan)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	select {
+	case <-p.quit:
+		return
+	default:
+	}
+
+	close(p.quit)
+	p.dropCurrent()
 }
 
+// Play blocks until the clip ends or is stopped and returns "end" or "stop".
+// A request is stopped if a newer one arrived after it, or if Stop was called
+// while it was still being fetched.
 func (p *Player) Play(link string) (string, error) {
 	if !IsLinkValid(link) {
 		return "", ErrInvalidLink
 	}
+
+	ticket := p.nextTicket()
 
 	f, err := fsutil.GetFromCache(link)
 	if err != nil {
@@ -46,52 +122,99 @@ func (p *Player) Play(link string) (string, error) {
 	}
 	defer f.Close()
 
-	p.Stop()
+	pb, err := p.submit(ticket, f.Name())
+	switch {
+	case errors.Is(err, errSuperseded):
+		return reasonStop, nil
+	case err != nil:
+		return "", err
+	}
 
-	p.Lock()
-	p.playing = true
-	p.Unlock()
+	<-pb.done
 
-	p.playChan <- f.Name()
+	return pb.reason, nil
+}
+
+// Stop stops the current clip and any request still being fetched.
+func (p *Player) Stop() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.floor = p.seq
+	p.dropCurrent()
+}
+
+// Next blocks until there is a clip to play. It returns false once the player
+// is closed.
+func (p *Player) Next() (*Playback, bool) {
+	for {
+		select {
+		case <-p.wake:
+		case <-p.quit:
+			return nil, false
+		}
+
+		p.mu.Lock()
+		pb := p.pending
+		p.pending = nil
+		p.mu.Unlock()
+
+		if pb != nil && pb.ctx.Err() == nil {
+			return pb, true
+		}
+	}
+}
+
+func (p *Player) nextTicket() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.seq++
+
+	return p.seq
+}
+
+func (p *Player) submit(ticket uint64, path string) (*Playback, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	select {
-	case <-p.endChan:
-		return "end", nil
-	case <-p.internalStop:
-		return "stop", nil
+	case <-p.quit:
+		return nil, ErrClosed
+	default:
+	}
+
+	if ticket <= p.floor {
+		return nil, errSuperseded
+	}
+	p.floor = ticket
+
+	p.dropCurrent()
+
+	pb := newPlayback(p, path)
+	p.current, p.pending = pb, pb
+
+	select {
+	case p.wake <- struct{}{}:
+	default:
+	}
+
+	return pb, nil
+}
+
+func (p *Player) release(pb *Playback) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.current == pb {
+		p.current = nil
 	}
 }
 
-func (p *Player) claimNotPlaying() bool {
-	p.Lock()
-	defer p.Unlock()
-
-	if !p.playing {
-		return false
+func (p *Player) dropCurrent() {
+	if p.current != nil {
+		p.current.stop()
 	}
 
-	p.playing = false
-
-	return true
-}
-
-func (p *Player) Stop() {
-	if !p.claimNotPlaying() {
-		return
-	}
-
-	p.StopChan <- true
-	p.internalStop <- true
-}
-
-func (p *Player) End() {
-	if !p.claimNotPlaying() {
-		return
-	}
-
-	p.endChan <- true
-}
-
-func (p *Player) GetNextPlay() string {
-	return <-p.playChan
+	p.current, p.pending = nil, nil
 }

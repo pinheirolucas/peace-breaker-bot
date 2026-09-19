@@ -117,8 +117,9 @@ paths:
       summary: Stop whatever the bot is currently playing
       description: |
         Signals the in-flight `POST /api/v1/bot/play` (if any) to stop; that
-        request then returns with `exitReason: "stop"`. Safe to call when
-        nothing is playing (idempotent).
+        request then returns with `exitReason: "stop"`. Requests still
+        fetching their clip are stopped too. Safe to call when nothing is
+        playing (idempotent).
       responses:
         "200":
           description: Empty body; no Content-Type is set. Always this status.

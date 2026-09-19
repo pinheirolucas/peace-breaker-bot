@@ -16,7 +16,7 @@ func TestStopImmediatelyAfterHandoffIsNotLost(t *testing.T) {
 			reason <- r
 		}()
 
-		p.GetNextPlay()
+		pb, _ := p.Next()
 		p.Stop()
 
 		select {
@@ -25,8 +25,13 @@ func TestStopImmediatelyAfterHandoffIsNotLost(t *testing.T) {
 				t.Fatalf("iteration %d: reason = %q, want stop", i, r)
 			}
 		case <-time.After(500 * time.Millisecond):
-			t.Fatalf("iteration %d: Stop() right after the handoff was lost — Play never returned", i)
+			t.Fatalf("iteration %d: Play never returned after Stop()", i)
 		}
-		mustReceiveStop(t, p)
+
+		if pb.Context().Err() == nil {
+			t.Fatalf("iteration %d: playback context was not cancelled", i)
+		}
+
+		p.Close()
 	}
 }

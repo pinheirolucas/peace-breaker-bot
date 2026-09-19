@@ -4,6 +4,7 @@ package opusaudio
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 	"sync"
@@ -35,13 +36,13 @@ type mp3OpusProvider struct {
 	file    *os.File
 	pcm     *bufio.Reader
 	encoder *opus.Encoder
-	stop    <-chan bool
+	ctx     context.Context
 
 	closeOnce sync.Once
 	done      chan struct{}
 }
 
-func newMp3OpusProvider(filename string, stop <-chan bool) (*mp3OpusProvider, <-chan struct{}, error) {
+func newMp3OpusProvider(ctx context.Context, filename string) (*mp3OpusProvider, <-chan struct{}, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, nil, err
@@ -71,7 +72,7 @@ func newMp3OpusProvider(filename string, stop <-chan bool) (*mp3OpusProvider, <-
 		file:    file,
 		pcm:     bufio.NewReaderSize(resampled, 16384),
 		encoder: encoder,
-		stop:    stop,
+		ctx:     ctx,
 		done:    make(chan struct{}),
 	}
 
@@ -79,16 +80,14 @@ func newMp3OpusProvider(filename string, stop <-chan bool) (*mp3OpusProvider, <-
 }
 
 func (p *mp3OpusProvider) ProvideOpusFrame() ([]byte, error) {
-	select {
-	case <-p.stop:
+	if p.ctx.Err() != nil {
 		p.finish()
 		return nil, io.EOF
-	default:
 	}
 
 	pcm := make([]byte, frameSize*channels*2)
 	if _, err := io.ReadFull(p.pcm, pcm); err != nil {
-		if err != io.EOF && err != io.ErrUnexpectedEOF {
+		if err != io.EOF && err != io.ErrUnexpectedEOF && p.ctx.Err() == nil {
 			OnError("error reading decoded mp3 PCM", err)
 		}
 		p.finish()
@@ -117,15 +116,20 @@ func (p *mp3OpusProvider) finish() {
 	})
 }
 
-// PlayAudioFile plays filename over the given voice.Conn and blocks until
-// playback ends or stop is signalled.
-func PlayAudioFile(conn voice.Conn, filename string, stop <-chan bool) {
-	provider, done, err := newMp3OpusProvider(filename, stop)
+// PlayAudioFile plays filename over conn and blocks until playback ends or ctx
+// is cancelled.
+func PlayAudioFile(ctx context.Context, conn voice.Conn, filename string) {
+	provider, done, err := newMp3OpusProvider(ctx, filename)
 	if err != nil {
 		OnError("failed to decode mp3", err)
 		return
 	}
 
 	conn.SetOpusFrameProvider(provider)
-	<-done
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		provider.Close()
+	}
 }

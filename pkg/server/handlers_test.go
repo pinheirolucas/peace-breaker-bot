@@ -352,8 +352,8 @@ func TestHandleBotPlayReturnsTheExitReasonWhenPlaybackEnds(t *testing.T) {
 	}()
 
 	// Stand in for the bot loop: take the queued path, then report completion.
-	player.GetNextPlay()
-	player.End()
+	pb, _ := player.Next()
+	pb.End()
 
 	select {
 	case <-done:
@@ -384,7 +384,7 @@ func TestHandleBotStopReleasesAnInFlightPlay(t *testing.T) {
 		close(done)
 	}()
 
-	player.GetNextPlay()
+	pb, _ := player.Next()
 
 	s.handleBotStop(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/bot/stop", nil))
 
@@ -393,7 +393,7 @@ func TestHandleBotStopReleasesAnInFlightPlay(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("POST /api/v1/bot/stop did not release the in-flight /api/v1/bot/play")
 	}
-	<-player.StopChan
+	<-pb.Context().Done()
 
 	data, _ := decodeBody(t, rec)["data"].(map[string]any)
 	if data["exitReason"] != "stop" {
