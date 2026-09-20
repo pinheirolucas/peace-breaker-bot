@@ -172,6 +172,7 @@ func (s *Server) handleBotPlay(w http.ResponseWriter, r *http.Request) {
 		writeErrorMessage(w, http.StatusUnprocessableEntity, lang, "unsuported_audio_format")
 		return
 	default:
+		slog.Error("play failed", "url", in.URL, "err", err)
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}
@@ -238,9 +239,11 @@ func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 		writeErrorMessage(w, http.StatusUnprocessableEntity, lang, "unsuported_audio_format")
 		return
 	case errors.Is(err, fsutil.ErrUpstreamUnavailable):
+		slog.Warn("instant content unavailable upstream", "url", rawURL, "err", err)
 		writeErrorMessage(w, http.StatusBadGateway, lang, "bad_http_status")
 		return
 	default:
+		slog.Error("instant content failed", "url", rawURL, "err", err)
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}
@@ -336,6 +339,7 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 		writeErrorMessage(w, http.StatusBadGateway, lang, "bad_http_status")
 		return
 	case errors.Is(err, provider.ErrUnexpectedMarkup):
+		slog.Error("provider.List", "provider", providerKey, "err", err)
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "name_link_not_matched")
 		return
 	default:

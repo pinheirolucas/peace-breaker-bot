@@ -51,4 +51,6 @@ func (b *Bot) joinVoiceChannel(client *bot.Client, guildID, channelID snowflake.
 		return
 	}
 	b.setVoiceConn(conn)
+
+	slog.Info("joined voice channel", "guildId", guildID, "channelId", channelID, "channelName", channelName)
 }

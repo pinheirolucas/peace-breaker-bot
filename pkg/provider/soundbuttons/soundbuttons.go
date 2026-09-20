@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -130,6 +131,7 @@ func (p *Provider) fetchFeed(page int) (*provider.ListResult, error) {
 
 	var feed feedResponse
 	if err := json.NewDecoder(res.Body).Decode(&feed); err != nil {
+		slog.Warn("soundbuttons trending feed undecodable, returning an empty page", "page", page, "err", err)
 		return emptyPage(page), nil
 	}
 

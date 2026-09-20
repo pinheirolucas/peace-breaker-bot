@@ -158,7 +158,7 @@ func (b *Bot) Start() error {
 	b.setClient(client)
 
 	opusaudio.OnError = func(str string, err error) {
-		slog.Debug(str, "err", err)
+		slog.Warn(str, "err", err)
 	}
 
 	if err = client.OpenGateway(context.Background()); err != nil {
