@@ -12,10 +12,23 @@ func TestBannerPlainHasNoEscapes(t *testing.T) {
 	if strings.Contains(got, "\x1b") {
 		t.Errorf("plain banner carries escapes: %q", got)
 	}
-	for _, want := range []string{"Peace Breaker Bot", "v0.0.3", "╭", "@"} {
+	for _, want := range []string{"v0.0.3", "╭", "@", "█▀█ █▀▀ ▄▀▄ █▀▀ █▀▀  █▀▄ █▀▄ █▀▀ ▄▀▄ █ █ █▀▀ █▀▄  █▀▄ █▀█ ▀█▀"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("banner missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestBannerColorsEachLetterWithAPaletteSlot(t *testing.T) {
+	got := banner(true, "v0.0.3")
+
+	for i, style := range slotColors {
+		if !strings.Contains(got, style) {
+			t.Errorf("slot %d color missing from the banner", i)
+		}
+	}
+	if !strings.Contains(got, ansiBlue+"█▀█"+ansiReset+" "+ansiRed+"█▀▀"+ansiReset) {
+		t.Errorf("first letters P and E are not blue and red: %q", got)
 	}
 }
 
@@ -37,12 +50,15 @@ func TestBannerRowsAlign(t *testing.T) {
 	}
 
 	for i, row := range rows {
-		cassette := []rune(row)
-		if len(cassette) < 20 {
+		cells := []rune(row)
+		if len(cells) > 80 {
+			t.Errorf("row %d is %d columns, want at most 80: %q", i, len(cells), row)
+		}
+		if len(cells) < 16 {
 			t.Fatalf("row %d too short: %q", i, row)
 		}
-		if edge := cassette[19]; i == 0 && edge != '╮' || i == 4 && edge != '╯' || i > 0 && i < 4 && edge != '│' {
-			t.Errorf("row %d does not close the cassette at column 20: %q", i, row)
+		if edge := cells[15]; i == 0 && edge != '╮' || i == 4 && edge != '╯' || i > 0 && i < 4 && edge != '│' {
+			t.Errorf("row %d does not close the cassette at column 16: %q", i, row)
 		}
 	}
 }
@@ -72,7 +88,7 @@ func TestPrintBannerSkipsJSON(t *testing.T) {
 
 	var buf bytes.Buffer
 	PrintBanner(&buf, "v0.0.3")
-	if !strings.Contains(buf.String(), "Peace Breaker Bot") {
+	if !strings.Contains(buf.String(), "v0.0.3") {
 		t.Errorf("text format printed no banner: %q", buf.String())
 	}
 
