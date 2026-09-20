@@ -1,8 +1,10 @@
 // Package httpclient builds the client every request to myinstants.com goes
 // through, setting a non-default User-Agent required to get past Cloudflare.
+// It is also the one place outgoing requests are traced at DEBUG.
 package httpclient
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -17,14 +19,24 @@ type userAgentTransport struct {
 }
 
 func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.Header.Get("User-Agent") != "" {
-		return t.base.RoundTrip(req)
+	if req.Header.Get("User-Agent") == "" {
+		req = req.Clone(req.Context())
+		req.Header.Set("User-Agent", UserAgent)
 	}
 
-	req = req.Clone(req.Context())
-	req.Header.Set("User-Agent", UserAgent)
+	start := time.Now()
+	res, err := t.base.RoundTrip(req)
 
-	return t.base.RoundTrip(req)
+	// URL, status and timing only: never headers or bodies.
+	attrs := []any{"method", req.Method, "url", req.URL, "durationMs", time.Since(start).Milliseconds()}
+	if err != nil {
+		attrs = append(attrs, "err", err)
+	} else {
+		attrs = append(attrs, "status", res.StatusCode)
+	}
+	slog.Debug("upstream request", attrs...)
+
+	return res, err
 }
 
 // New returns a client that identifies itself with UserAgent.

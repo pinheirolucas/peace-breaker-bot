@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/libp2p/zeroconf/v2"
@@ -37,6 +38,8 @@ func newAutodiscoveryServer(service string, port int) (*zeroconf.Server, error) 
 	if err != nil {
 		return nil, err
 	}
+
+	slog.Debug("autodiscovery registration", "instance", instanceName, "port", port, "txt", text)
 
 	server, err := zeroconf.Register(
 		instanceName,
