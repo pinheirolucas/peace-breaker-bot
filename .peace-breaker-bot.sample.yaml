@@ -30,6 +30,18 @@ bot:
   # - Environment: BOT_LOCALE
   locale: ''
 
+# Logging related settings.
+log:
+  # How much the bot logs. One of debug, info, warn or error (case-insensitive).
+  # Defaults to info when blank. debug adds a trace of what the player, clip
+  # cache, providers and HTTP API are doing; it never includes the bot token
+  # or message content.
+  #
+  # Setting mapped to:
+  # - CLI Flag: --log-level
+  # - Environment: LOG_LEVEL
+  level: info
+
 # HTTP server related settings.
 # This HTTP server exposes an interface for controlling the bot playback and
 # retrieving data from MyInstants.

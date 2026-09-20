@@ -33,7 +33,7 @@ Config is loaded via Viper from (in order of precedence) CLI flags, environment 
 - `bot.token` / `--bot-token` / `BOT_TOKEN` — Discord bot OAuth token.
 - `server.address` / `--server-address` / `SERVER_ADDRESS` — address the HTTP API binds to (e.g. `0.0.0.0:9001`).
 
-`cmd/root.go` fails fast (before starting anything) if any of these three are missing. `bot.locale` / `--bot-locale` / `BOT_LOCALE` is optional — see "Internationalization" below.
+`cmd/root.go` fails fast (before starting anything) if any of these three are missing. `bot.locale` / `--bot-locale` / `BOT_LOCALE` is optional — see "Internationalization" below. So is `log.level` / `--log-level` / `LOG_LEVEL` — see "Logging" below.
 
 `PUID`/`PGID` are read directly via `os.Getenv` in `cmd/root.go`, not through Viper — they're Docker plumbing (which host uid/gid ends up owning the instant cache), not app config, and only do anything when the process starts as root. See "Distribution" below for what they're for.
 
@@ -48,6 +48,17 @@ Entry point `main.go` → `cmd.Execute()` (Cobra root command in `cmd/root.go`) 
 - Both the bot loop and any HTTP handler that calls `player.Play` share the *same* player — there is no queue, so a newer `/api/v1/bot/play` replaces whatever is playing and the replaced request returns `exitReason: "stop"`.
 - **`Bot.vc` doesn't clear itself on an external disconnect.** `!leave` and a normal shutdown both nil it out, but if the bot gets kicked from its channel or Discord drops the voice socket some other way, nothing notices — `Bot.Status()` (and `GET /api/v1/bot/status`) keeps reporting the last-known channel as connected until the process restarts. A voice-state-update listener that nils `vc` on the bot's own disconnect would close this; it hasn't been built yet.
 - Errors surfaced from `pkg/instant`/`pkg/fsutil` (`ErrInvalidLink`, `fsutil.ErrNotFound`, `fsutil.ErrUnsuportedAudioFormat`) and from `pkg/provider` (see above) are mapped to specific HTTP status codes/labels in `pkg/server/server.go` — follow that pattern when adding new error cases rather than falling through to the generic 500. `writeErrorMessage` writes the status it is given, and the UI's HTTP client (in the sibling `peace-breaker-bot-desktop` repo) is expected to branch on it; `label` remains the stable machine-readable identifier within a given status. See "Internationalization" below for where the `message` text that goes with each `label` actually lives.
+
+## Logging
+
+Logging is stdlib `log/slog`, called through the package-level functions (`slog.Debug(...)`), not injected loggers. `pkg/logging` builds the default handler and owns `log.level` (`debug`/`info`/`warn`/`error`, case-insensitive, default `info`). The level lives in a `slog.LevelVar` so `initConfig` can apply it after the handler exists; an invalid value is rejected by `runRootCmd` before anything starts, not by `initConfig`, so `--help`/`--version` still work with a bad `LOG_LEVEL`.
+
+- **Don't derive a logger at package scope** (`var log = slog.Default().With(...)`): it runs before `SetDefault` and would keep the wrong handler for the life of the process. Call `slog.X` at the call site.
+- **disgo is capped at INFO** (`logging.Floor` passed through `bot.WithLogger` in `Bot.Start`), whatever `log.level` says. At DEBUG disgo logs REST request/response bodies and voice-gateway payloads, and those carry the voice token. `debug` means this app's own lines.
+- **Never log** the bot token, Discord message content (only the matched command name), or HTTP headers/bodies. The startup config line reports `tokenSet`, not the token.
+- **Nothing per audio frame**: the pipeline emits 50 frames a second, so `pkg/opusaudio` counts frames and logs once when the stream finishes.
+- Field keys are camelCase (`guildId`, `durationMs`, `err`); durations are integer milliseconds.
+- HTTP calls to providers and clip hosts are traced in one place, the logging `RoundTrip` in `pkg/httpclient` (DEBUG); the API's own requests by the middleware in `pkg/server/logging.go` (DEBUG, since the UI polls `/bot/status`).
 
 ## Internationalization
 

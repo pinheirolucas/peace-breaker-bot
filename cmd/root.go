@@ -15,6 +15,7 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/logging"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/privdrop"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/server"
 )
@@ -66,9 +67,18 @@ func init() {
 
 	rootCmd.PersistentFlags().String("bot-locale", "", "fixes the bot's response language (e.g. en-US, pt-BR); defaults to the invoking guild's own locale")
 	viper.BindPFlag("bot.locale", rootCmd.PersistentFlags().Lookup("bot-locale"))
+
+	rootCmd.PersistentFlags().String("log-level", "", "log verbosity: debug, info, warn or error (default info)")
+	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
 }
 
 func runRootCmd(cmd *cobra.Command, args []string) error {
+	// initConfig can't fail a command, so a bad level is only applied there
+	// when valid; it is rejected here, before anything starts.
+	if _, err := logging.ParseLevel(viper.GetString("log.level")); err != nil {
+		return err
+	}
+
 	if err := dropPrivileges(); err != nil {
 		return fmt.Errorf("failed to drop privileges: %w", err)
 	}
@@ -89,6 +99,15 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	locale := viper.GetString("bot.locale")
+
+	slog.Debug("config resolved",
+		"logLevel", viper.GetString("log.level"),
+		"configFile", viper.ConfigFileUsed(),
+		"owner", owner,
+		"address", address,
+		"locale", locale,
+		"tokenSet", true,
+	)
 
 	errchan := make(chan error, 1)
 	defer close(errchan)
@@ -117,7 +136,7 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 
 	err = <-errchan
 
-	slog.Error("", "err", err)
+	slog.Error("bot exited", "err", err)
 	time.Sleep(time.Second * 3)
 
 	return nil
@@ -150,6 +169,8 @@ func dropPrivileges() error {
 	}
 	if dropped {
 		slog.Info("dropped privileges", "uid", uid, "gid", gid, "dir", dir)
+	} else {
+		slog.Debug("privileges not dropped", "euid", os.Geteuid(), "cacheDir", dir)
 	}
 
 	return nil
@@ -170,14 +191,7 @@ func envIntOrDefault(key string, def int) (int, error) {
 }
 
 func initConfig() {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02 15:04:05"))
-			}
-			return a
-		},
-	})))
+	logging.Setup(os.Stdout)
 
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
@@ -206,7 +220,15 @@ func initConfig() {
 	viper.SetEnvKeyReplacer(replacer)
 	viper.AutomaticEnv()
 
-	if err := viper.ReadInConfig(); err == nil {
+	readErr := viper.ReadInConfig()
+
+	// Applied before the line below so a quieter level also silences it. An
+	// invalid value keeps the default here and is rejected by runRootCmd.
+	if level, err := logging.ParseLevel(viper.GetString("log.level")); err == nil {
+		logging.SetLevel(level)
+	}
+
+	if readErr == nil {
 		slog.Info("using config file", "configFile", viper.ConfigFileUsed())
 	}
 }

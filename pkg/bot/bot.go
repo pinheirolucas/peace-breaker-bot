@@ -23,6 +23,7 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/command"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/i18n"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/logging"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/opusaudio"
 )
 
@@ -121,6 +122,9 @@ func New(token string, player *instant.Player, options ...Option) (*Bot, error) 
 
 func (b *Bot) Start() error {
 	client, err := disgo.New(b.token,
+		// At DEBUG disgo logs REST bodies and voice-gateway payloads, which
+		// carry the voice token. Cap it at INFO whatever level the app runs at.
+		bot.WithLogger(slog.New(logging.Floor(slog.Default().Handler(), slog.LevelInfo))),
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(
 				gateway.IntentGuilds,
