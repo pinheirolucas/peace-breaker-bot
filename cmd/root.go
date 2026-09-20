@@ -70,10 +70,24 @@ func init() {
 
 	rootCmd.PersistentFlags().String("log-level", "", "log verbosity: debug, info, warn or error (default info)")
 	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
+
+	rootCmd.PersistentFlags().String("log-format", "", "log layout: text or json (default text)")
+	viper.BindPFlag("log.format", rootCmd.PersistentFlags().Lookup("log-format"))
+
+	rootCmd.PersistentFlags().String("log-color", "", "colored logs: auto, always or never (default auto)")
+	viper.BindPFlag("log.color", rootCmd.PersistentFlags().Lookup("log-color"))
 }
 
 func runRootCmd(cmd *cobra.Command, args []string) error {
 	if _, err := logging.ParseLevel(viper.GetString("log.level")); err != nil {
+		return err
+	}
+
+	if _, err := logging.ParseFormat(viper.GetString("log.format")); err != nil {
+		return err
+	}
+
+	if _, err := logging.ParseColorMode(viper.GetString("log.color")); err != nil {
 		return err
 	}
 
@@ -100,6 +114,8 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 
 	slog.Debug("config resolved",
 		"logLevel", viper.GetString("log.level"),
+		"logFormat", viper.GetString("log.format"),
+		"logColor", logging.ColorEnabled(),
 		"configFile", viper.ConfigFileUsed(),
 		"owner", owner,
 		"address", address,
@@ -224,6 +240,16 @@ func initConfig() {
 	if level, err := logging.ParseLevel(viper.GetString("log.level")); err == nil {
 		logging.SetLevel(level)
 	}
+
+	if format, err := logging.ParseFormat(viper.GetString("log.format")); err == nil {
+		logging.SetFormat(format)
+	}
+
+	if mode, err := logging.ParseColorMode(viper.GetString("log.color")); err == nil {
+		logging.SetColor(logging.CurrentFormat() == logging.FormatText && logging.ResolveColor(mode))
+	}
+
+	logging.PrintBanner(os.Stdout, Version)
 
 	if readErr == nil {
 		slog.Info("using config file", "configFile", viper.ConfigFileUsed())
