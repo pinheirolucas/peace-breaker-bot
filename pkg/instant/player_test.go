@@ -1,11 +1,14 @@
 package instant
 
 import (
+	"bytes"
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -348,6 +351,66 @@ func TestConcurrentPlaysAndStopsAlwaysReturn(t *testing.T) {
 	for reason := range results {
 		if reason != "end" && reason != "stop" {
 			t.Errorf("reason = %q, want \"end\" or \"stop\"", reason)
+		}
+	}
+}
+
+func captureDebugLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	return &buf
+}
+
+func TestSupersededPlayIsTracedWithItsTicketAndTheFloor(t *testing.T) {
+	logs := captureDebugLogs(t)
+
+	p := NewPlayer()
+	defer p.Close()
+
+	older := p.nextTicket()
+	newer := p.nextTicket()
+
+	p.submit(newer, "b.mp3")
+	p.submit(older, "a.mp3")
+
+	for _, want := range []string{
+		"playback submitted", "ticket=2",
+		"play superseded", "ticket=1", "floor=2",
+	} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("log %q does not contain %q", logs.String(), want)
+		}
+	}
+}
+
+func TestPlayTracesItsLifecycle(t *testing.T) {
+	logs := captureDebugLogs(t)
+
+	link := "https://example.com/a.mp3"
+	seedCache(t, link)
+
+	p := NewPlayer()
+	defer p.Close()
+
+	result, errs := playAsync(p, link)
+	pb, ok := p.Next()
+	if !ok {
+		t.Fatal("Next returned false")
+	}
+	pb.End()
+	waitFor(t, result)
+	if err := <-errs; err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	for _, want := range []string{"play requested", "clip resolved", "playback finished", "reason=end", "durationMs="} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("log %q does not contain %q", logs.String(), want)
 		}
 	}
 }

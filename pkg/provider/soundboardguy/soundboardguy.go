@@ -4,6 +4,7 @@ package soundboardguy
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -96,6 +97,7 @@ func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
+		slog.Debug("upstream 404, returning an empty page", "provider", key, "url", listURL)
 		return emptyPage(page, pageSize), nil
 	default:
 		return nil, fmt.Errorf("soundboardguy: %w: status %d", provider.ErrBadUpstreamStatus, res.StatusCode)

@@ -3,7 +3,9 @@ package instant
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 )
@@ -104,6 +106,8 @@ func (p *Player) Close() {
 
 	close(p.quit)
 	p.dropCurrent()
+
+	slog.Debug("player closed")
 }
 
 // Play blocks until the clip ends or is stopped and returns "end" or "stop".
@@ -115,12 +119,15 @@ func (p *Player) Play(link string) (string, error) {
 	}
 
 	ticket := p.nextTicket()
+	slog.Debug("play requested", "ticket", ticket, "link", link)
 
 	f, err := fsutil.GetFromCache(link)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
+
+	slog.Debug("clip resolved", "ticket", ticket, "path", f.Name())
 
 	pb, err := p.submit(ticket, f.Name())
 	switch {
@@ -130,7 +137,15 @@ func (p *Player) Play(link string) (string, error) {
 		return "", err
 	}
 
+	start := time.Now()
 	<-pb.done
+
+	slog.Debug("playback finished",
+		"ticket", ticket,
+		"reason", pb.reason,
+		"path", pb.path,
+		"durationMs", time.Since(start).Milliseconds(),
+	)
 
 	return pb.reason, nil
 }
@@ -141,6 +156,7 @@ func (p *Player) Stop() {
 	defer p.mu.Unlock()
 
 	p.floor = p.seq
+	slog.Debug("stop requested", "floor", p.floor, "hadCurrent", p.current != nil)
 	p.dropCurrent()
 }
 
@@ -161,6 +177,9 @@ func (p *Player) Next() (*Playback, bool) {
 
 		if pb != nil && pb.ctx.Err() == nil {
 			return pb, true
+		}
+		if pb != nil {
+			slog.Debug("skipping stale playback", "path", pb.path)
 		}
 	}
 }
@@ -185,10 +204,12 @@ func (p *Player) submit(ticket uint64, path string) (*Playback, error) {
 	}
 
 	if ticket <= p.floor {
+		slog.Debug("play superseded", "ticket", ticket, "floor", p.floor)
 		return nil, errSuperseded
 	}
 	p.floor = ticket
 
+	slog.Debug("playback submitted", "ticket", ticket, "replacedCurrent", p.current != nil)
 	p.dropCurrent()
 
 	pb := newPlayback(p, path)

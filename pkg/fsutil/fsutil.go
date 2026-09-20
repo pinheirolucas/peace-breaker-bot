@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/httpclient"
 )
@@ -57,12 +59,16 @@ func (c *Cache) Get(link string) (*os.File, error) {
 	ifile, err := os.Open(fname)
 	switch {
 	case err == nil:
+		slog.Debug("cache hit", "link", link, "path", fname)
 		return ifile, nil
 	case os.IsNotExist(err):
 		// continue
 	default:
 		return nil, err
 	}
+
+	slog.Debug("cache miss, downloading", "link", link, "path", fname)
+	start := time.Now()
 
 	fr, err := c.client().Get(link)
 	if err != nil {
@@ -74,8 +80,10 @@ func (c *Cache) Get(link string) (*os.File, error) {
 	case http.StatusOK:
 		// continue
 	case http.StatusNotFound:
+		slog.Debug("download rejected", "link", link, "reason", "status", "status", fr.StatusCode)
 		return nil, ErrNotFound
 	default:
+		slog.Debug("download rejected", "link", link, "reason", "status", "status", fr.StatusCode)
 		return nil, fmt.Errorf("%w: status %d", ErrUpstreamUnavailable, fr.StatusCode)
 	}
 
@@ -89,6 +97,7 @@ func (c *Cache) Get(link string) (*os.File, error) {
 	head = head[:n]
 
 	if !looksLikeMP3(head) {
+		slog.Debug("download rejected", "link", link, "reason", "not-mp3")
 		return nil, ErrUnsuportedAudioFormat
 	}
 
@@ -97,9 +106,12 @@ func (c *Cache) Get(link string) (*os.File, error) {
 		return nil, err
 	}
 
-	if _, err := io.Copy(file, io.MultiReader(bytes.NewReader(head), fr.Body)); err != nil {
+	written, err := io.Copy(file, io.MultiReader(bytes.NewReader(head), fr.Body))
+	if err != nil {
 		return nil, err
 	}
+
+	slog.Debug("download finished", "link", link, "bytes", written, "durationMs", time.Since(start).Milliseconds())
 
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return nil, err

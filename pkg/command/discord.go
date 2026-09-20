@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -60,8 +61,12 @@ func (d *DiscordDispatcher) Dispatch(e *events.MessageCreate) {
 	info, ok := d.handlers[cmd]
 	d.Unlock()
 	if !ok {
+		// Nothing from the message: it's somebody's chat, not a command.
+		slog.Debug("message is not a command")
 		return
 	}
+
+	slog.Debug("dispatching command", "command", cmd, "argCount", len(args), "guildId", e.GuildID)
 
 	info.handlerFunc(&DiscordContext{
 		Dispatcher: d,

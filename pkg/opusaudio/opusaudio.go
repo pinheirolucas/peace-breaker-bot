@@ -6,8 +6,10 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/disgoorg/disgo/voice"
 	"github.com/hajimehoshi/go-mp3"
@@ -38,6 +40,10 @@ type mp3OpusProvider struct {
 	encoder *opus.Encoder
 	ctx     context.Context
 
+	// frames is atomic because finish can run from PlayAudioFile's goroutine
+	// (via Close) while disgo is still pulling frames on its own.
+	frames atomic.Int64
+
 	closeOnce sync.Once
 	done      chan struct{}
 }
@@ -53,6 +59,8 @@ func newMp3OpusProvider(ctx context.Context, filename string) (*mp3OpusProvider,
 		_ = file.Close()
 		return nil, nil, err
 	}
+
+	slog.Debug("decoder opened", "path", filename, "sampleRate", decoder.SampleRate(), "resampling", decoder.SampleRate() != frameRate)
 
 	resampled := NewResampler(decoder, decoder.SampleRate(), frameRate, channels)
 
@@ -81,16 +89,18 @@ func newMp3OpusProvider(ctx context.Context, filename string) (*mp3OpusProvider,
 
 func (p *mp3OpusProvider) ProvideOpusFrame() ([]byte, error) {
 	if p.ctx.Err() != nil {
-		p.finish()
+		p.finish("cancelled")
 		return nil, io.EOF
 	}
 
 	pcm := make([]byte, frameSize*channels*2)
 	if _, err := io.ReadFull(p.pcm, pcm); err != nil {
+		reason := "eof"
 		if err != io.EOF && err != io.ErrUnexpectedEOF && p.ctx.Err() == nil {
 			OnError("error reading decoded mp3 PCM", err)
+			reason = "error"
 		}
-		p.finish()
+		p.finish(reason)
 		return nil, io.EOF
 	}
 
@@ -98,21 +108,27 @@ func (p *mp3OpusProvider) ProvideOpusFrame() ([]byte, error) {
 	n, err := p.encoder.Encode(pcm, out)
 	if err != nil {
 		OnError("encoding error", err)
-		p.finish()
+		p.finish("error")
 		return nil, io.EOF
 	}
+
+	p.frames.Add(1)
 
 	return out[:n], nil
 }
 
 func (p *mp3OpusProvider) Close() {
-	p.finish()
+	p.finish("closed")
 }
 
-func (p *mp3OpusProvider) finish() {
+// finish releases the file once. reason is only logged for the call that
+// wins, and the log is one line per stream, never per frame.
+func (p *mp3OpusProvider) finish(reason string) {
 	p.closeOnce.Do(func() {
 		_ = p.file.Close()
 		close(p.done)
+
+		slog.Debug("audio stream finished", "frames", p.frames.Load(), "reason", reason)
 	})
 }
 
