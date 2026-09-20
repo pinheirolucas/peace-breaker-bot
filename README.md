@@ -37,7 +37,7 @@ A Windows installer (built from `peace-breaker-bot.iss` with [Inno Setup](https:
 
 ```bash
 docker run -d --name instants \
-  -e BOT_OWNER=yourname -e BOT_TOKEN=... -e SERVER_ADDRESS=0.0.0.0:9001 \
+  -e PBB_BOT_OWNER=yourname -e PBB_BOT_TOKEN=... -e PBB_SERVER_ADDRESS=0.0.0.0:9001 \
   -p 9001:9001 -v instants-cache:/home/app/.instants \
   ghcr.io/pinheirolucas/peace-breaker-bot:latest
 ```
@@ -50,11 +50,13 @@ Settings can be provided via config file, environment variable, or CLI flag (in 
 
 | Setting | Config key | CLI flag | Environment variable | Description |
 | --- | --- | --- | --- | --- |
-| Bot owner | `bot.owner` | `--bot-owner` | `BOT_OWNER` | Discord username allowed to command the bot |
-| Bot token | `bot.token` | `--bot-token` | `BOT_TOKEN` | Discord application OAuth token |
-| Server address | `server.address` | `--server-address` | `SERVER_ADDRESS` | Address the HTTP API binds to, e.g. `0.0.0.0:9001` |
-| Bot locale | `bot.locale` | `--bot-locale` | `BOT_LOCALE` | Optional. Fixes the bot's response language (e.g. `en-US`, `pt-BR`) instead of following each Discord server's own locale |
-| Log level | `log.level` | `--log-level` | `LOG_LEVEL` | Optional. `debug`, `info` (default), `warn` or `error`. An unknown value stops the app at startup |
+| Bot owner | `bot.owner` | `--bot-owner` | `PBB_BOT_OWNER` | Discord username allowed to command the bot |
+| Bot token | `bot.token` | `--bot-token` | `PBB_BOT_TOKEN` | Discord application OAuth token |
+| Server address | `server.address` | `--server-address` | `PBB_SERVER_ADDRESS` | Address the HTTP API binds to, e.g. `0.0.0.0:9001` |
+| Bot locale | `bot.locale` | `--bot-locale` | `PBB_BOT_LOCALE` | Optional. Fixes the bot's response language (e.g. `en-US`, `pt-BR`) instead of following each Discord server's own locale |
+| Log level | `log.level` | `--log-level` | `PBB_LOG_LEVEL` | Optional. `debug`, `info` (default), `warn` or `error`. An unknown value stops the app at startup |
+
+Every environment variable carries a `PBB_` prefix. `PUID` and `PGID` (Docker only) are the exception and are not prefixed.
 
 The first three are required; the app exits immediately if any are missing. Bot locale and log level are optional.
 

@@ -8,7 +8,7 @@ bot:
   #
   # Setting mapped to:
   # - CLI Flag: --bot-owner
-  # - Environment: BOT_OWNER
+  # - Environment: PBB_BOT_OWNER
   owner: ''
 
   # The application OAuth token to authenticate with the bot.
@@ -16,7 +16,7 @@ bot:
   #
   # Setting mapped to:
   # - CLI Flag: --bot-token
-  # - Environment: BOT_TOKEN
+  # - Environment: PBB_BOT_TOKEN
   token: ''
 
   # Fixes the bot's response language, overriding the invoking Discord
@@ -27,7 +27,7 @@ bot:
   #
   # Setting mapped to:
   # - CLI Flag: --bot-locale
-  # - Environment: BOT_LOCALE
+  # - Environment: PBB_BOT_LOCALE
   locale: ''
 
 # Logging related settings.
@@ -39,7 +39,7 @@ log:
   #
   # Setting mapped to:
   # - CLI Flag: --log-level
-  # - Environment: LOG_LEVEL
+  # - Environment: PBB_LOG_LEVEL
   level: info
 
 # HTTP server related settings.
@@ -52,5 +52,5 @@ server:
   #
   # Setting mapped to:
   # - CLI Flag: --server-address
-  # - Environment: SERVER_ADDRESS
+  # - Environment: PBB_SERVER_ADDRESS
   address: 0.0.0.0:9001

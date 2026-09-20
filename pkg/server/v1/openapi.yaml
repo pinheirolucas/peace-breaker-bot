@@ -26,7 +26,7 @@ info:
     but the status code is now also meaningful and reflects each case below.
 servers:
   - url: http://localhost:9001
-    description: Default local bind address (server.address / --server-address / SERVER_ADDRESS)
+    description: Default local bind address (server.address / --server-address / PBB_SERVER_ADDRESS)
 security: []
 
 
