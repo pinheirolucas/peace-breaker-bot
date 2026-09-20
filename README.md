@@ -55,10 +55,12 @@ Settings can be provided via config file, environment variable, or CLI flag (in 
 | Server address | `server.address` | `--server-address` | `PBB_SERVER_ADDRESS` | Address the HTTP API binds to, e.g. `0.0.0.0:9001` |
 | Bot locale | `bot.locale` | `--bot-locale` | `PBB_BOT_LOCALE` | Optional. Fixes the bot's response language (e.g. `en-US`, `pt-BR`) instead of following each Discord server's own locale |
 | Log level | `log.level` | `--log-level` | `PBB_LOG_LEVEL` | Optional. `debug`, `info` (default), `warn` or `error`. An unknown value stops the app at startup |
+| Log format | `log.format` | `--log-format` | `PBB_LOG_FORMAT` | Optional. `text` (default, key=value lines) or `json` (one object per line, no banner). An unknown value stops the app at startup |
+| Log color | `log.color` | `--log-color` | `PBB_LOG_COLOR` | Optional. `auto` (default), `always` or `never`. `auto` colors only on a terminal and follows `NO_COLOR`, `FORCE_COLOR` and `CLICOLOR_FORCE`. An unknown value stops the app at startup |
 
-Every environment variable carries a `PBB_` prefix. `PUID` and `PGID` (Docker only) are the exception and are not prefixed.
+Every environment variable carries a `PBB_` prefix. The exceptions are `PUID` and `PGID` (Docker only) and the standard `NO_COLOR`, `FORCE_COLOR` and `CLICOLOR_FORCE`, which are not prefixed.
 
-The first three are required; the app exits immediately if any are missing. Bot locale and log level are optional.
+The first three are required; the app exits immediately if any are missing. Bot locale and the log settings are optional.
 
 The config file is YAML, named `.peace-breaker-bot.yaml`, and is looked up in your home directory or the current working directory. See [`.peace-breaker-bot.sample.yaml`](./.peace-breaker-bot.sample.yaml) for a template:
 

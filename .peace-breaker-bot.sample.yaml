@@ -42,6 +42,25 @@ log:
   # - Environment: PBB_LOG_LEVEL
   level: info
 
+  # Layout of each log line. One of text (key=value, the default) or json (one
+  # JSON object per line, for log collectors). json never carries colors and
+  # skips the startup banner.
+  #
+  # Setting mapped to:
+  # - CLI Flag: --log-format
+  # - Environment: PBB_LOG_FORMAT
+  format: text
+
+  # Whether text logs are colored. One of auto, always or never. auto colors
+  # only when stdout is a terminal, and follows the NO_COLOR, FORCE_COLOR and
+  # CLICOLOR_FORCE environment variables. An explicit always or never wins over
+  # them.
+  #
+  # Setting mapped to:
+  # - CLI Flag: --log-color
+  # - Environment: PBB_LOG_COLOR
+  color: auto
+
 # HTTP server related settings.
 # This HTTP server exposes an interface for controlling the bot playback and
 # retrieving data from MyInstants.
