@@ -1,6 +1,8 @@
 package command
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -153,5 +155,29 @@ func TestGetHelpResolvesRealKeysPerLocale(t *testing.T) {
 	}
 	if !strings.Contains(enUS, "Available commands:") {
 		t.Errorf("GetHelp(en-US) missing the English header:\n%s", enUS)
+	}
+}
+
+func TestDispatchLogsTheCommandButNeverAnOrdinaryMessage(t *testing.T) {
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	d := NewDiscordDispatcher()
+	d.Register("!ping", "bot.ping.help", func(ctx *DiscordContext) {})
+
+	d.Dispatch(messageWith("!ping now"))
+	d.Dispatch(messageWith("my-private-chat with a friend"))
+
+	logs := buf.String()
+	if !strings.Contains(logs, "dispatching command") || !strings.Contains(logs, "command=!ping") || !strings.Contains(logs, "argCount=1") {
+		t.Errorf("log %q does not trace the matched command", logs)
+	}
+	if !strings.Contains(logs, "message is not a command") {
+		t.Errorf("log %q does not note the ignored message", logs)
+	}
+	if strings.Contains(logs, "my-private-chat") {
+		t.Errorf("log %q leaks message content", logs)
 	}
 }

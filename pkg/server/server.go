@@ -67,6 +67,18 @@ func (s *Server) providers() provider.Registry {
 	return defaultRegistry
 }
 
+func (s *Server) providerKeys() []string {
+	registry := s.providers()
+
+	keys := make([]string, 0, len(registry))
+	for key := range registry {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	return keys
+}
+
 func (s *Server) Start(address string) error {
 	r := http.NewServeMux()
 
@@ -80,7 +92,7 @@ func (s *Server) Start(address string) error {
 	r.HandleFunc("GET /api/docs", s.handleDocs)
 
 	srv := &http.Server{
-		Handler: corsMiddleware(r),
+		Handler: loggingMiddleware(corsMiddleware(r)),
 		Addr:    address,
 	}
 
@@ -95,6 +107,7 @@ func (s *Server) Start(address string) error {
 	}
 	defer autodiscovery.Shutdown()
 
+	slog.Debug("providers registered", "keys", s.providerKeys())
 	slog.Info("listening for http connections", "address", address)
 	slog.Info("registering autodiscovery server", "service", autodiscoveryServiceName)
 	return srv.ListenAndServe()
@@ -156,6 +169,7 @@ func (s *Server) handleBotPlay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !s.bot.Status().Connected {
+		slog.Debug("play refused, bot not connected", "url", in.URL)
 		writeErrorMessage(w, http.StatusConflict, lang, "bot_not_connected")
 		return
 	}
@@ -173,6 +187,7 @@ func (s *Server) handleBotPlay(w http.ResponseWriter, r *http.Request) {
 		writeErrorMessage(w, http.StatusUnprocessableEntity, lang, "unsuported_audio_format")
 		return
 	default:
+		slog.Error("play failed", "url", in.URL, "err", err)
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}
@@ -242,16 +257,19 @@ func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 
 	rawURL := r.PathValue("url")
 	if !instant.IsLinkValid(rawURL) {
+		slog.Debug("content url rejected", "reason", "malformed", "url", rawURL)
 		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
 		return
 	}
 
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
+		slog.Debug("content url rejected", "reason", "malformed", "url", rawURL)
 		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
 		return
 	}
 	if _, ok := s.allowedContentHosts()[strings.ToLower(parsed.Hostname())]; !ok {
+		slog.Debug("content url rejected", "reason", "host-not-allowed", "host", parsed.Hostname())
 		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
 		return
 	}
@@ -263,9 +281,11 @@ func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 		writeErrorMessage(w, http.StatusUnprocessableEntity, lang, "unsuported_audio_format")
 		return
 	case errors.Is(err, fsutil.ErrUpstreamUnavailable):
+		slog.Warn("instant content unavailable upstream", "url", rawURL, "err", err)
 		writeErrorMessage(w, http.StatusBadGateway, lang, "bad_http_status")
 		return
 	default:
+		slog.Error("instant content failed", "url", rawURL, "err", err)
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}
@@ -282,12 +302,7 @@ type providerInfo struct {
 
 func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 	registry := s.providers()
-
-	keys := make([]string, 0, len(registry))
-	for key := range registry {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := s.providerKeys()
 
 	out := make([]providerInfo, 0, len(keys))
 	for _, key := range keys {
@@ -333,6 +348,7 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 
 	p, ok := s.providers().Get(providerKey)
 	if !ok {
+		slog.Debug("provider not found", "provider", providerKey)
 		writeErrorMessage(w, http.StatusNotFound, lang, "provider_not_found")
 		return
 	}
@@ -342,11 +358,13 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 
-	list, err := p.List(provider.ListParams{
+	params := provider.ListParams{
 		Page:   page,
 		Search: strings.TrimSpace(vars.Get("search")),
 		Region: strings.TrimSpace(vars.Get("region")),
-	})
+	}
+
+	list, err := p.List(params)
 	switch {
 	case err == nil:
 	case errors.Is(err, provider.ErrInvalidRegion):
@@ -361,6 +379,7 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 		writeErrorMessage(w, http.StatusBadGateway, lang, "bad_http_status")
 		return
 	case errors.Is(err, provider.ErrUnexpectedMarkup):
+		slog.Error("provider.List", "provider", providerKey, "err", err)
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "name_link_not_matched")
 		return
 	default:
@@ -368,6 +387,15 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
 		return
 	}
+
+	slog.Debug("instants listed",
+		"provider", providerKey,
+		"page", params.Page,
+		"search", params.Search,
+		"region", params.Region,
+		"count", len(list.Instants),
+		"pages", list.Pages,
+	)
 
 	writeSuccessResponse(w, toInstantListResponse(list))
 }

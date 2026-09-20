@@ -4,6 +4,7 @@ package myinstants
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -95,6 +96,7 @@ func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
+		slog.Debug("upstream 404, returning an empty page", "provider", key, "url", listURL)
 		return &provider.ListResult{
 			Instants: []provider.Instant{},
 			Pages:    provider.InferPages(page, 0, pageSize),

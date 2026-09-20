@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/disgoorg/disgo"
 	"github.com/disgoorg/disgo/bot"
@@ -23,6 +24,7 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/command"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/i18n"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/logging"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/opusaudio"
 )
 
@@ -121,6 +123,7 @@ func New(token string, player *instant.Player, options ...Option) (*Bot, error) 
 
 func (b *Bot) Start() error {
 	client, err := disgo.New(b.token,
+		bot.WithLogger(slog.New(logging.Floor(slog.Default().Handler(), slog.LevelInfo))),
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(
 				gateway.IntentGuilds,
@@ -154,7 +157,7 @@ func (b *Bot) Start() error {
 	b.setClient(client)
 
 	opusaudio.OnError = func(str string, err error) {
-		slog.Debug(str, "err", err)
+		slog.Warn(str, "err", err)
 	}
 
 	if err = client.OpenGateway(context.Background()); err != nil {
@@ -180,12 +183,15 @@ func (b *Bot) Start() error {
 
 			conn := b.voiceConn()
 			if conn == nil {
+				slog.Debug("no voice connection, dropping playback", "path", pb.Path())
 				pb.End()
 				continue
 			}
 
 			slog.Info("playing instant", "path", pb.Path())
+			start := time.Now()
 			opusaudio.PlayAudioFile(pb.Context(), conn, pb.Path())
+			slog.Debug("audio playback returned", "path", pb.Path(), "durationMs", time.Since(start).Milliseconds())
 			pb.End()
 		}
 	}()
@@ -205,14 +211,17 @@ func (b *Bot) handleReady(e *events.Ready) {
 
 func (b *Bot) handleMessages(e *events.MessageCreate) {
 	if b.owner != "" && b.owner != e.Message.Author.Username {
+		slog.Debug("message ignored", "reason", "not-owner", "authorId", e.Message.Author.ID, "guildId", e.GuildID)
 		return
 	}
 
 	if e.Message.Author.ID == e.Client().ID() {
+		slog.Debug("message ignored", "reason", "own-message", "guildId", e.GuildID)
 		return
 	}
 
 	if e.GuildID == nil {
+		slog.Debug("direct message received", "authorId", e.Message.Author.ID)
 		b.handleInviteDM(e)
 		return
 	}
@@ -221,18 +230,25 @@ func (b *Bot) handleMessages(e *events.MessageCreate) {
 }
 
 func (b *Bot) localeFor(e *events.MessageCreate) language.Tag {
+	tag, source := b.resolveLocale(e)
+	slog.Debug("locale resolved", "locale", tag, "source", source)
+
+	return tag
+}
+
+func (b *Bot) resolveLocale(e *events.MessageCreate) (language.Tag, string) {
 	if b.locale != "" {
-		return i18n.Match(b.locale)
+		return i18n.Match(b.locale), "config"
 	}
 
 	if e.GuildID == nil {
-		return i18n.Supported[0]
+		return i18n.Supported[0], "default"
 	}
 
 	guild, ok := e.Client().Caches.Guild(*e.GuildID)
 	if !ok {
-		return i18n.Supported[0]
+		return i18n.Supported[0], "default"
 	}
 
-	return i18n.Match(guild.PreferredLocale)
+	return i18n.Match(guild.PreferredLocale), "guild"
 }

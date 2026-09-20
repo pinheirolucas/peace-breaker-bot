@@ -1,9 +1,12 @@
 package opusaudio
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/pion/opus"
@@ -126,5 +129,32 @@ func TestMp3OpusProviderStopsEarly(t *testing.T) {
 	case <-done:
 	default:
 		t.Fatal("done channel should be closed once the context is cancelled")
+	}
+}
+
+func TestMp3OpusProviderLogsOncePerStreamNotPerFrame(t *testing.T) {
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	provider, done, err := newMp3OpusProvider(context.Background(), "testdata/valid.mp3")
+	if err != nil {
+		t.Fatalf("newMp3OpusProvider: %v", err)
+	}
+
+	for {
+		if _, err := provider.ProvideOpusFrame(); err != nil {
+			break
+		}
+	}
+	<-done
+
+	logs := buf.String()
+	if strings.Count(logs, "\n") != 2 {
+		t.Errorf("want 2 lines (decoder opened, stream finished), got %q", logs)
+	}
+	if !strings.Contains(logs, "reason=eof") || !strings.Contains(logs, "frames=") || strings.Contains(logs, "frames=0") {
+		t.Errorf("log %q should report a nonzero frame count and reason=eof", logs)
 	}
 }

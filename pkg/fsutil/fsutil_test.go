@@ -1,13 +1,16 @@
 package fsutil
 
 import (
+	"bytes"
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -154,5 +157,64 @@ func TestDirOrCreateFallsBackToHomeInstants(t *testing.T) {
 	want := filepath.Join(home, ".instants")
 	if got != want {
 		t.Errorf("DirOrCreate() = %q, want %q", got, want)
+	}
+}
+
+func captureDebugLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	return &buf
+}
+
+func TestGetTracesADownloadThenACacheHit(t *testing.T) {
+	logs := captureDebugLogs(t)
+	c, base := newCache(t, serveFile(t, "valid.mp3"))
+	link := base + "/a.mp3"
+
+	for i := 0; i < 2; i++ {
+		f, err := c.Get(link)
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		f.Close()
+	}
+
+	for _, want := range []string{"cache miss, downloading", "download finished", "bytes=", "cache hit"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("log %q does not contain %q", logs.String(), want)
+		}
+	}
+	if strings.Count(logs.String(), "cache miss") != 1 {
+		t.Errorf("want exactly one miss in %q", logs.String())
+	}
+}
+
+func TestGetTracesWhyADownloadWasRejected(t *testing.T) {
+	cases := map[string]struct {
+		handler http.HandlerFunc
+		want    string
+	}{
+		"status":  {func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }, "status=403"},
+		"not-mp3": {func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("<html>nope</html>")) }, "reason=not-mp3"},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			logs := captureDebugLogs(t)
+			c, base := newCache(t, tc.handler)
+
+			if _, err := c.Get(base + "/a.mp3"); err == nil {
+				t.Fatal("Get succeeded")
+			}
+
+			if !strings.Contains(logs.String(), "download rejected") || !strings.Contains(logs.String(), tc.want) {
+				t.Errorf("log %q does not contain a rejection with %q", logs.String(), tc.want)
+			}
+		})
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -99,6 +100,7 @@ func (p *Provider) fetchHTML(listURL string, page int) (*provider.ListResult, er
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
+		slog.Debug("upstream 404, returning an empty page", "provider", key, "url", listURL)
 		return emptyPage(page), nil
 	default:
 		return nil, fmt.Errorf("soundbuttons: %w: status %d", provider.ErrBadUpstreamStatus, res.StatusCode)
@@ -123,6 +125,7 @@ func (p *Provider) fetchFeed(page int) (*provider.ListResult, error) {
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
+		slog.Debug("upstream 404, returning an empty page", "provider", key, "url", feedURL)
 		return emptyPage(page), nil
 	default:
 		return nil, fmt.Errorf("soundbuttons: %w: status %d", provider.ErrBadUpstreamStatus, res.StatusCode)
@@ -130,6 +133,7 @@ func (p *Provider) fetchFeed(page int) (*provider.ListResult, error) {
 
 	var feed feedResponse
 	if err := json.NewDecoder(res.Body).Decode(&feed); err != nil {
+		slog.Warn("soundbuttons trending feed undecodable, returning an empty page", "page", page, "err", err)
 		return emptyPage(page), nil
 	}
 

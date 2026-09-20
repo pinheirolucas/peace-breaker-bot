@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -60,8 +61,11 @@ func (d *DiscordDispatcher) Dispatch(e *events.MessageCreate) {
 	info, ok := d.handlers[cmd]
 	d.Unlock()
 	if !ok {
+		slog.Debug("message is not a command")
 		return
 	}
+
+	slog.Debug("dispatching command", "command", cmd, "argCount", len(args), "guildId", e.GuildID)
 
 	info.handlerFunc(&DiscordContext{
 		Dispatcher: d,

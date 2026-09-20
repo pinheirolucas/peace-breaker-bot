@@ -21,6 +21,7 @@ func parseInviteCode(content string) (string, bool) {
 func (b *Bot) handleInviteDM(e *events.MessageCreate) {
 	code, ok := parseInviteCode(e.Message.Content)
 	if !ok {
+		slog.Debug("direct message is not an invite link")
 		return
 	}
 
@@ -30,6 +31,8 @@ func (b *Bot) handleInviteDM(e *events.MessageCreate) {
 		slog.Error("failed to resolve invite", "Code", code, "err", err)
 		return
 	}
+
+	slog.Debug("invite resolved", "code", code, "hasGuild", invite.Guild != nil, "hasChannel", invite.Channel != nil)
 
 	if invite.Guild == nil || invite.Channel == nil {
 		slog.Info("invite has no voice channel target", "Code", code)
@@ -44,5 +47,6 @@ func (b *Bot) handleInviteDM(e *events.MessageCreate) {
 		return
 	}
 
+	slog.Debug("invite targets a voice channel", "code", code, "guildId", invite.Guild.ID, "channelId", invite.Channel.ID, "channelType", invite.Channel.Type)
 	b.joinVoiceChannel(client, invite.Guild.ID, invite.Channel.ID, invite.Channel.Name)
 }
