@@ -25,11 +25,32 @@ jobs:
       - name: Test
         run: make test
 
-      - name: Vet
-        run: go vet ./...
+  vet:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
 
-      - name: Vet (windows)
-        run: GOOS=windows go vet ./...
+    steps:
+      - name: Set up repo
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: .tool-versions
+
+      - name: Vet
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: go vet ./...
 
   govulncheck:
     runs-on: ubuntu-latest
