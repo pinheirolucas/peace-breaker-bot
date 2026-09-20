@@ -1,6 +1,7 @@
 package opusaudio
 
 import (
+	"context"
 	"io"
 	"math"
 	"testing"
@@ -67,8 +68,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 // through go-mp3, the resampler, and the Opus encoder, as a guard against
 // the decode pipeline silently producing empty or corrupt frames.
 func TestMp3OpusProviderDecodesFixture(t *testing.T) {
-	stop := make(chan bool)
-	provider, done, err := newMp3OpusProvider("testdata/valid.mp3", stop)
+	provider, done, err := newMp3OpusProvider(context.Background(), "testdata/valid.mp3")
 	if err != nil {
 		t.Fatalf("newMp3OpusProvider: %v", err)
 	}
@@ -103,13 +103,13 @@ func TestMp3OpusProviderDecodesFixture(t *testing.T) {
 	}
 }
 
-// TestMp3OpusProviderStopsEarly checks that signalling stop before any
+// TestMp3OpusProviderStopsEarly checks that cancelling the context before any
 // frame is pulled ends playback immediately, without decoding the file.
 func TestMp3OpusProviderStopsEarly(t *testing.T) {
-	stop := make(chan bool, 1)
-	stop <- true
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-	provider, done, err := newMp3OpusProvider("testdata/valid.mp3", stop)
+	provider, done, err := newMp3OpusProvider(ctx, "testdata/valid.mp3")
 	if err != nil {
 		t.Fatalf("newMp3OpusProvider: %v", err)
 	}
@@ -125,6 +125,6 @@ func TestMp3OpusProviderStopsEarly(t *testing.T) {
 	select {
 	case <-done:
 	default:
-		t.Fatal("done channel should be closed once stop is signalled")
+		t.Fatal("done channel should be closed once the context is cancelled")
 	}
 }

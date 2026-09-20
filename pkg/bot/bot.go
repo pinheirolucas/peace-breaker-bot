@@ -173,17 +173,20 @@ func (b *Bot) Start() error {
 	go func() {
 		// TODO: create a bot client to manage all this complexity
 		for {
-			path := b.player.GetNextPlay()
+			pb, ok := b.player.Next()
+			if !ok {
+				return
+			}
 
 			conn := b.voiceConn()
 			if conn == nil {
-				b.player.End()
+				pb.End()
 				continue
 			}
 
-			slog.Info("playing instant", "path", path)
-			opusaudio.PlayAudioFile(conn, path, b.player.StopChan)
-			b.player.End()
+			slog.Info("playing instant", "path", pb.Path())
+			opusaudio.PlayAudioFile(pb.Context(), conn, pb.Path())
+			pb.End()
 		}
 	}()
 
