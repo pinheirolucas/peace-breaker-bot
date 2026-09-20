@@ -12,7 +12,7 @@ func TestBannerPlainHasNoEscapes(t *testing.T) {
 	if strings.Contains(got, "\x1b") {
 		t.Errorf("plain banner carries escapes: %q", got)
 	}
-	for _, want := range []string{"Peace Breaker Bot", "v0.0.3", "instants on demand", "╭", "@"} {
+	for _, want := range []string{"Peace Breaker Bot", "v0.0.3", "╭", "@"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("banner missing %q:\n%s", want, got)
 		}
@@ -44,6 +44,26 @@ func TestBannerRowsAlign(t *testing.T) {
 		if edge := cassette[19]; i == 0 && edge != '╮' || i == 4 && edge != '╯' || i > 0 && i < 4 && edge != '│' {
 			t.Errorf("row %d does not close the cassette at column 20: %q", i, row)
 		}
+	}
+}
+
+func TestDisplayVersion(t *testing.T) {
+	tests := map[string]string{"0.0.3": "v0.0.3", "1.4.0-rc.1": "v1.4.0-rc.1", "v0.0.3": "v0.0.3", "dev": "dev", "": ""}
+
+	for in, want := range tests {
+		if got := displayVersion(in); got != want {
+			t.Errorf("displayVersion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestPrintBannerShowsTheVersionWithAPrefix(t *testing.T) {
+	setupBuffer(t)
+
+	var buf bytes.Buffer
+	PrintBanner(&buf, "0.0.3")
+	if !strings.Contains(buf.String(), "v0.0.3") {
+		t.Errorf("banner missing the prefixed version: %q", buf.String())
 	}
 }
 

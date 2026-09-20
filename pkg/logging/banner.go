@@ -12,7 +12,15 @@ func PrintBanner(w io.Writer, version string) {
 		return
 	}
 
-	fmt.Fprint(w, banner(ColorEnabled(), version))
+	fmt.Fprint(w, banner(ColorEnabled(), displayVersion(version)))
+}
+
+func displayVersion(version string) string {
+	if version != "" && version[0] >= '0' && version[0] <= '9' {
+		return "v" + version
+	}
+
+	return version
 }
 
 func banner(colored bool, version string) string {
@@ -35,7 +43,7 @@ func banner(colored bool, version string) string {
 		edge("╭" + strings.Repeat("─", 18) + "╮"),
 		edge("│") + " " + reel("╭───╮") + strings.Repeat(" ", 6) + reel("╭───╮") + " " + edge("│") + "   " + p(ansiBold, "Peace Breaker Bot"),
 		edge("│") + " " + reel("│ @ │") + tape + reel("│ @ │") + " " + edge("│") + "   " + p(ansiDim, version),
-		edge("│") + " " + reel("╰───╯") + strings.Repeat(" ", 6) + reel("╰───╯") + " " + edge("│") + "   " + p(ansiDim, "instants on demand"),
+		edge("│") + " " + reel("╰───╯") + strings.Repeat(" ", 6) + reel("╰───╯") + " " + edge("│"),
 		edge("╰" + strings.Repeat("─", 18) + "╯"),
 	}
 
