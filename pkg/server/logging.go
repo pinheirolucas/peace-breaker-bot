@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// loggingMiddleware traces each API request at DEBUG. It's not INFO because
-// the UI polls /bot/status and would drown the log.
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !slog.Default().Enabled(r.Context(), slog.LevelDebug) {
@@ -22,7 +20,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 		status := rec.status
 		if status == 0 {
-			// A handler that writes nothing gets net/http's implicit 200.
 			status = http.StatusOK
 		}
 
@@ -36,7 +33,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// statusRecorder remembers the first status a handler writes.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -56,7 +52,6 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 	return r.ResponseWriter.Write(b)
 }
 
-// Unwrap lets http.ResponseController reach the underlying writer.
 func (r *statusRecorder) Unwrap() http.ResponseWriter {
 	return r.ResponseWriter
 }

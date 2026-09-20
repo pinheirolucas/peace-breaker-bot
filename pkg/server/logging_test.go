@@ -13,8 +13,6 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/provider"
 )
 
-// captureLogs routes the default slog logger into the returned buffer at the
-// given level for the duration of the test.
 func captureLogs(t *testing.T, level slog.Level) *bytes.Buffer {
 	t.Helper()
 

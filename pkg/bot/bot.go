@@ -123,8 +123,6 @@ func New(token string, player *instant.Player, options ...Option) (*Bot, error) 
 
 func (b *Bot) Start() error {
 	client, err := disgo.New(b.token,
-		// At DEBUG disgo logs REST bodies and voice-gateway payloads, which
-		// carry the voice token. Cap it at INFO whatever level the app runs at.
 		bot.WithLogger(slog.New(logging.Floor(slog.Default().Handler(), slog.LevelInfo))),
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(
@@ -212,8 +210,6 @@ func (b *Bot) handleReady(e *events.Ready) {
 }
 
 func (b *Bot) handleMessages(e *events.MessageCreate) {
-	// Every message in every server the bot is in reaches here, so log only
-	// that one was ignored and by whom, never what it said.
 	if b.owner != "" && b.owner != e.Message.Author.Username {
 		slog.Debug("message ignored", "reason", "not-owner", "authorId", e.Message.Author.ID, "guildId", e.GuildID)
 		return
@@ -240,7 +236,6 @@ func (b *Bot) localeFor(e *events.MessageCreate) language.Tag {
 	return tag
 }
 
-// resolveLocale also reports which rule decided the locale.
 func (b *Bot) resolveLocale(e *events.MessageCreate) (language.Tag, string) {
 	if b.locale != "" {
 		return i18n.Match(b.locale), "config"

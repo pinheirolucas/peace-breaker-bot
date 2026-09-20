@@ -40,8 +40,6 @@ type mp3OpusProvider struct {
 	encoder *opus.Encoder
 	ctx     context.Context
 
-	// frames is atomic because finish can run from PlayAudioFile's goroutine
-	// (via Close) while disgo is still pulling frames on its own.
 	frames atomic.Int64
 
 	closeOnce sync.Once
@@ -121,8 +119,6 @@ func (p *mp3OpusProvider) Close() {
 	p.finish("closed")
 }
 
-// finish releases the file once. reason is only logged for the call that
-// wins, and the log is one line per stream, never per frame.
 func (p *mp3OpusProvider) finish(reason string) {
 	p.closeOnce.Do(func() {
 		_ = p.file.Close()

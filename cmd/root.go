@@ -73,8 +73,6 @@ func init() {
 }
 
 func runRootCmd(cmd *cobra.Command, args []string) error {
-	// initConfig can't fail a command, so a bad level is only applied there
-	// when valid; it is rejected here, before anything starts.
 	if _, err := logging.ParseLevel(viper.GetString("log.level")); err != nil {
 		return err
 	}
@@ -222,8 +220,6 @@ func initConfig() {
 
 	readErr := viper.ReadInConfig()
 
-	// Applied before the line below so a quieter level also silences it. An
-	// invalid value keeps the default here and is rejected by runRootCmd.
 	if level, err := logging.ParseLevel(viper.GetString("log.level")); err == nil {
 		logging.SetLevel(level)
 	}
