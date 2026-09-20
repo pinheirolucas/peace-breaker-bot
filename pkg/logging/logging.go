@@ -34,7 +34,7 @@ func SetLevel(l slog.Level) {
 }
 
 func newHandler(w io.Writer, l slog.Leveler) slog.Handler {
-	return slog.NewTextHandler(w, &slog.HandlerOptions{
+	text := slog.NewTextHandler(&colorWriter{w: w}, &slog.HandlerOptions{
 		Level: l,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if len(groups) == 0 && a.Key == slog.TimeKey {
@@ -43,6 +43,9 @@ func newHandler(w io.Writer, l slog.Leveler) slog.Handler {
 			return a
 		},
 	})
+	json := slog.NewJSONHandler(w, &slog.HandlerOptions{Level: l})
+
+	return formatHandler{text: text, json: json}
 }
 
 func Floor(h slog.Handler, min slog.Level) slog.Handler {
