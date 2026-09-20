@@ -45,6 +45,7 @@ func newRegistry(providers ...provider.Provider) provider.Registry {
 // BotStatus is the bot's voice-connection state, as the server needs it.
 type BotStatus interface {
 	Status() bot.VoiceStatus
+	Identity() (bot.Identity, bool)
 }
 
 type Server struct {
@@ -183,20 +184,44 @@ func (s *Server) handleBotStop(w http.ResponseWriter, r *http.Request) {
 	s.player.Stop()
 }
 
+type botIdentityResponse struct {
+	ID          string `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+	AvatarURL   string `json:"avatarUrl,omitempty"`
+	ProfileURL  string `json:"profileUrl"`
+	InviteURL   string `json:"inviteUrl"`
+}
+
 type botStatusResponse struct {
-	Connected   bool   `json:"connected"`
-	GuildID     string `json:"guildId,omitempty"`
-	GuildName   string `json:"guildName,omitempty"`
-	ChannelID   string `json:"channelId,omitempty"`
-	ChannelName string `json:"channelName,omitempty"`
+	Connected   bool                 `json:"connected"`
+	Bot         *botIdentityResponse `json:"bot,omitempty"`
+	GuildID     string               `json:"guildId,omitempty"`
+	GuildName   string               `json:"guildName,omitempty"`
+	ChannelID   string               `json:"channelId,omitempty"`
+	ChannelName string               `json:"channelName,omitempty"`
+	ChannelURL  string               `json:"channelUrl,omitempty"`
 }
 
 func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
 	status := s.bot.Status()
 	out := &botStatusResponse{Connected: status.Connected}
+	if identity, ok := s.bot.Identity(); ok {
+		out.Bot = &botIdentityResponse{
+			ID:          identity.ID.String(),
+			Username:    identity.Username,
+			DisplayName: identity.DisplayName,
+			AvatarURL:   identity.AvatarURL,
+			ProfileURL:  identity.ProfileURL(),
+			InviteURL:   identity.InviteURL(),
+		}
+	}
 	if status.Connected {
 		out.GuildID, out.GuildName = status.GuildID.String(), status.GuildName
 		out.ChannelID, out.ChannelName = status.ChannelID.String(), status.ChannelName
+		if status.GuildID != 0 && status.ChannelID != 0 {
+			out.ChannelURL = bot.ChannelURL(status.GuildID, status.ChannelID)
+		}
 	}
 	writeSuccessResponse(w, out)
 }

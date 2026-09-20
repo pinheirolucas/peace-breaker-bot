@@ -127,13 +127,16 @@ paths:
   /api/v1/bot/status:
     get:
       operationId: botStatus
-      summary: Report the bot's current voice connection
+      summary: Report which bot this is and its current voice connection
       description: |
         Read-only, meant for polling: lets the UI pre-emptively disable
         "send to Discord" instead of only reacting to a `409` from
-        `POST /api/v1/bot/play`. Guild/channel IDs are sent as strings —
-        Discord snowflakes overflow JS's safe integer range — and their
-        name fields are omitted entirely while disconnected, or when
+        `POST /api/v1/bot/play`. `bot` identifies the Discord account the
+        server is controlling; it is present whether or not the bot is in a
+        voice channel, and omitted only until the gateway's `READY` event
+        has arrived after startup. Guild/channel/bot IDs are sent as strings —
+        Discord snowflakes overflow JS's safe integer range — and the name
+        and URL fields are omitted entirely while disconnected, or when
         connected but not found in cache, rather than sent as `""`.
       responses:
         "200":
@@ -148,12 +151,31 @@ paths:
                   value:
                     data:
                       connected: true
+                      bot:
+                        id: "345678901234567890"
+                        username: "peace-breaker"
+                        displayName: "peace-breaker"
+                        avatarUrl: "https://cdn.discordapp.com/avatars/345678901234567890/a1b2c3.png"
+                        profileUrl: "https://discord.com/users/345678901234567890"
+                        inviteUrl: "https://discord.com/oauth2/authorize?client_id=345678901234567890&scope=bot&permissions=3214336"
                       guildId: "123456789012345678"
                       guildName: "My Server"
                       channelId: "234567890123456789"
                       channelName: "General"
+                      channelUrl: "https://discord.com/channels/123456789012345678/234567890123456789"
                 disconnected:
                   summary: The bot has no active voice connection
+                  value:
+                    data:
+                      connected: false
+                      bot:
+                        id: "345678901234567890"
+                        username: "peace-breaker"
+                        displayName: "peace-breaker"
+                        profileUrl: "https://discord.com/users/345678901234567890"
+                        inviteUrl: "https://discord.com/oauth2/authorize?client_id=345678901234567890&scope=bot&permissions=3214336"
+                gatewayNotReady:
+                  summary: The server is up but the gateway hasn't sent READY yet
                   value: { data: { connected: false } }
 
   /api/v1/instants/{url}/content:
@@ -442,6 +464,31 @@ components:
               properties:
                 connected:
                   type: boolean
+                bot:
+                  type: object
+                  description: The Discord account this server controls. Present regardless of `connected`; omitted until the gateway's `READY` event has arrived.
+                  required: [id, username, displayName, profileUrl, inviteUrl]
+                  properties:
+                    id:
+                      type: string
+                      description: A Discord snowflake, sent as a string.
+                    username:
+                      type: string
+                    displayName:
+                      type: string
+                      description: The bot's global name if it has one, otherwise its username.
+                    avatarUrl:
+                      type: string
+                      format: uri
+                      description: Omitted if no avatar URL could be resolved.
+                    profileUrl:
+                      type: string
+                      format: uri
+                      description: Opens the bot's profile in the Discord client.
+                    inviteUrl:
+                      type: string
+                      format: uri
+                      description: Add-to-server link with the permissions the bot needs (View Channel, Send Messages, Read Message History, Connect, Speak). Only usable by others if the application is public in Discord's developer portal.
                 guildId:
                   type: string
                   description: Present only when connected. A Discord snowflake, sent as a string.
@@ -454,6 +501,10 @@ components:
                 channelName:
                   type: string
                   description: Present only when connected and resolved from cache.
+                channelUrl:
+                  type: string
+                  format: uri
+                  description: Jump link to the voice channel in the Discord client. Present only when connected.
 
     InstantContentSuccessEnvelope:
       allOf:

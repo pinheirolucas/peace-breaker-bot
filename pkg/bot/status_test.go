@@ -7,6 +7,7 @@ import (
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/cache"
+	"github.com/disgoorg/disgo/discord"
 	botgateway "github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/voice"
 	"github.com/disgoorg/snowflake/v2"
@@ -68,6 +69,7 @@ func TestStatusIsRaceFreeUnderConcurrentSetVoiceConn(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
 			_ = b.voiceConn()
+			_, _ = b.Identity()
 		}
 	}()
 
@@ -104,5 +106,57 @@ func TestStatusReportsConnectedWithoutCache(t *testing.T) {
 	}
 	if status.GuildName != "" || status.ChannelName != "" {
 		t.Errorf("GuildName/ChannelName = %q/%q, want empty with no cache", status.GuildName, status.ChannelName)
+	}
+}
+
+func TestIdentityIsUnavailableWithoutAClient(t *testing.T) {
+	b := &Bot{}
+
+	if _, ok := b.Identity(); ok {
+		t.Fatalf("Identity() ok = true with no client, want false")
+	}
+}
+
+func TestIdentityIsUnavailableBeforeReady(t *testing.T) {
+	b := &Bot{}
+	b.setClient(&bot.Client{Caches: cache.New()})
+
+	if _, ok := b.Identity(); ok {
+		t.Fatalf("Identity() ok = true with an empty self-user cache, want false")
+	}
+}
+
+func TestIdentityReadsTheSelfUserCache(t *testing.T) {
+	globalName := "Peace Breaker"
+	caches := cache.New()
+	caches.SetSelfUser(discord.OAuth2User{User: discord.User{
+		ID:            345,
+		Username:      "peace-breaker",
+		GlobalName:    &globalName,
+		Discriminator: "0",
+	}})
+	b := &Bot{}
+	b.setClient(&bot.Client{Caches: caches})
+
+	identity, ok := b.Identity()
+	if !ok {
+		t.Fatalf("Identity() ok = false, want true")
+	}
+	if identity.ID != 345 || identity.Username != "peace-breaker" || identity.DisplayName != "Peace Breaker" {
+		t.Errorf("Identity() = %+v, want id 345, username peace-breaker, display name Peace Breaker", identity)
+	}
+}
+
+func TestIdentityLinks(t *testing.T) {
+	identity := Identity{ID: 345}
+
+	if got, want := identity.ProfileURL(), "https://discord.com/users/345"; got != want {
+		t.Errorf("ProfileURL() = %q, want %q", got, want)
+	}
+	if got, want := identity.InviteURL(), "https://discord.com/oauth2/authorize?client_id=345&scope=bot&permissions=3214336"; got != want {
+		t.Errorf("InviteURL() = %q, want %q", got, want)
+	}
+	if got, want := ChannelURL(123, 456), "https://discord.com/channels/123/456"; got != want {
+		t.Errorf("ChannelURL() = %q, want %q", got, want)
 	}
 }

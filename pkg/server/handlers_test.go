@@ -29,10 +29,14 @@ func serverAllowingHost(host string) *Server {
 }
 
 type fakeBotStatus struct {
-	status bot.VoiceStatus
+	status      bot.VoiceStatus
+	identity    bot.Identity
+	hasIdentity bool
 }
 
 func (f *fakeBotStatus) Status() bot.VoiceStatus { return f.status }
+
+func (f *fakeBotStatus) Identity() (bot.Identity, bool) { return f.identity, f.hasIdentity }
 
 func connectedBotStatus() *fakeBotStatus {
 	return &fakeBotStatus{status: bot.VoiceStatus{Connected: true}}
@@ -491,5 +495,87 @@ func TestHandleBotStatusReflectsADisconnectedBot(t *testing.T) {
 		if _, present := data[key]; present {
 			t.Errorf("%s present in a disconnected response, want omitted: %v", key, data[key])
 		}
+	}
+}
+
+func testIdentity() bot.Identity {
+	return bot.Identity{ID: 345, Username: "peace-breaker", DisplayName: "Peace Breaker", AvatarURL: "https://cdn.discordapp.com/avatars/345/a.png"}
+}
+
+func TestHandleBotStatusReportsTheBotIdentityWhileDisconnected(t *testing.T) {
+	s := New(instant.NewPlayer(), &fakeBotStatus{identity: testIdentity(), hasIdentity: true})
+
+	rec := httptest.NewRecorder()
+	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
+
+	data, ok := decodeBody(t, rec)["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("response had no data object: %s", rec.Body.String())
+	}
+	if data["connected"] != false {
+		t.Errorf("connected = %v, want false", data["connected"])
+	}
+	botData, ok := data["bot"].(map[string]any)
+	if !ok {
+		t.Fatalf("response had no bot object: %s", rec.Body.String())
+	}
+	want := map[string]string{
+		"id":          "345",
+		"username":    "peace-breaker",
+		"displayName": "Peace Breaker",
+		"avatarUrl":   "https://cdn.discordapp.com/avatars/345/a.png",
+		"profileUrl":  "https://discord.com/users/345",
+		"inviteUrl":   "https://discord.com/oauth2/authorize?client_id=345&scope=bot&permissions=3214336",
+	}
+	for key, value := range want {
+		if botData[key] != value {
+			t.Errorf("bot.%s = %v, want %q", key, botData[key], value)
+		}
+	}
+	if _, present := data["channelUrl"]; present {
+		t.Errorf("channelUrl present in a disconnected response: %v", data["channelUrl"])
+	}
+}
+
+func TestHandleBotStatusOmitsTheBotBeforeTheGatewayIsReady(t *testing.T) {
+	s := New(instant.NewPlayer(), &fakeBotStatus{status: bot.VoiceStatus{Connected: false}})
+
+	rec := httptest.NewRecorder()
+	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
+
+	data, ok := decodeBody(t, rec)["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("response had no data object: %s", rec.Body.String())
+	}
+	if _, present := data["bot"]; present {
+		t.Errorf("bot present in response, want omitted: %v", data["bot"])
+	}
+}
+
+func TestHandleBotStatusOmitsAnEmptyAvatarURL(t *testing.T) {
+	identity := testIdentity()
+	identity.AvatarURL = ""
+	s := New(instant.NewPlayer(), &fakeBotStatus{identity: identity, hasIdentity: true})
+
+	rec := httptest.NewRecorder()
+	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
+
+	data := decodeBody(t, rec)["data"].(map[string]any)
+	botData := data["bot"].(map[string]any)
+	if _, present := botData["avatarUrl"]; present {
+		t.Errorf("avatarUrl present, want omitted: %v", botData["avatarUrl"])
+	}
+}
+
+func TestHandleBotStatusLinksToTheConnectedChannel(t *testing.T) {
+	status := bot.VoiceStatus{Connected: true, GuildID: 123, ChannelID: 456}
+	s := New(instant.NewPlayer(), &fakeBotStatus{status: status, identity: testIdentity(), hasIdentity: true})
+
+	rec := httptest.NewRecorder()
+	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
+
+	data := decodeBody(t, rec)["data"].(map[string]any)
+	if data["channelUrl"] != "https://discord.com/channels/123/456" {
+		t.Errorf("channelUrl = %v, want https://discord.com/channels/123/456", data["channelUrl"])
 	}
 }
