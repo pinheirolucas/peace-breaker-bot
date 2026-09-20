@@ -7,8 +7,6 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 )
 
-// invitePermissions is what the bot needs in a server: reading and answering
-// the owner's commands in text channels, and joining and speaking in voice.
 const invitePermissions = discord.PermissionViewChannel |
 	discord.PermissionSendMessages |
 	discord.PermissionReadMessageHistory |
@@ -23,8 +21,7 @@ type Identity struct {
 	AvatarURL   string
 }
 
-// Identity returns the bot's own Discord account. It reports false until the
-// gateway has sent READY, since that is what fills the client's self-user cache.
+// Identity returns the bot's Discord account, or false before the gateway is ready.
 func (b *Bot) Identity() (Identity, bool) {
 	client := b.discordClient()
 	if client == nil {
@@ -44,17 +41,17 @@ func (b *Bot) Identity() (Identity, bool) {
 	}, true
 }
 
-// ProfileURL links to the bot's profile in the Discord client.
+// ProfileURL is the link to the bot's Discord profile.
 func (i Identity) ProfileURL() string {
 	return fmt.Sprintf("https://discord.com/users/%s", i.ID)
 }
 
-// InviteURL is the add-to-server link. A bot's application ID is its user ID.
+// InviteURL is the link to add the bot to a server.
 func (i Identity) InviteURL() string {
 	return fmt.Sprintf("https://discord.com/oauth2/authorize?client_id=%s&scope=bot&permissions=%d", i.ID, uint64(invitePermissions))
 }
 
-// ChannelURL links to a channel in the Discord client.
+// ChannelURL is the link to a channel.
 func ChannelURL(guildID, channelID snowflake.ID) string {
 	return fmt.Sprintf("https://discord.com/channels/%s/%s", guildID, channelID)
 }
