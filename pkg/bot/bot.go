@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -38,6 +39,9 @@ type Bot struct {
 	vcMu   sync.RWMutex
 	vc     voice.Conn
 	client *bot.Client
+
+	joinMu  sync.Mutex
+	ownerID atomic.Uint64
 
 	disp   *command.DiscordDispatcher
 	player *instant.Player
@@ -219,6 +223,8 @@ func (b *Bot) handleMessages(e *events.MessageCreate) {
 		slog.Debug("message ignored", "reason", "own-message", "guildId", e.GuildID)
 		return
 	}
+
+	b.rememberOwner(e.Message.Author.ID)
 
 	if e.GuildID == nil {
 		slog.Debug("direct message received", "authorId", e.Message.Author.ID)

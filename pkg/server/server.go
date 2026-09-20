@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -11,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/disgoorg/snowflake/v2"
 	"golang.org/x/text/language"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
@@ -42,20 +45,23 @@ func newRegistry(providers ...provider.Provider) provider.Registry {
 	return r
 }
 
-// BotStatus is the bot's voice-connection state, as the server needs it.
-type BotStatus interface {
+// BotControl is the bot's voice connection and identity, as the server needs them.
+type BotControl interface {
 	Status() bot.VoiceStatus
 	Identity() (bot.Identity, bool)
+	JoinOwner(ctx context.Context) error
+	JoinChannel(ctx context.Context, channelID snowflake.ID) error
+	Leave() error
 }
 
 type Server struct {
 	player *instant.Player
-	bot    BotStatus
+	bot    BotControl
 
 	registry provider.Registry
 }
 
-func New(player *instant.Player, bot BotStatus) *Server {
+func New(player *instant.Player, bot BotControl) *Server {
 	return &Server{player: player, bot: bot}
 }
 
@@ -84,6 +90,8 @@ func (s *Server) Start(address string) error {
 
 	r.HandleFunc("POST /api/v1/bot/play", s.handleBotPlay)
 	r.HandleFunc("POST /api/v1/bot/stop", s.handleBotStop)
+	r.HandleFunc("POST /api/v1/bot/join", s.handleBotJoin)
+	r.HandleFunc("POST /api/v1/bot/leave", s.handleBotLeave)
 	r.HandleFunc("GET /api/v1/bot/status", s.handleBotStatus)
 	r.HandleFunc("GET /api/v1/instants", s.handleListInstants)
 	r.HandleFunc("GET /api/v1/instants/{url}/content", s.handleInstantContent)
@@ -218,7 +226,7 @@ type botStatusResponse struct {
 	ChannelURL  string               `json:"channelUrl,omitempty"`
 }
 
-func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) botStatusResponse() *botStatusResponse {
 	status := s.bot.Status()
 	out := &botStatusResponse{Connected: status.Connected}
 	if identity, ok := s.bot.Identity(); ok {
@@ -238,7 +246,75 @@ func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
 			out.ChannelURL = bot.ChannelURL(status.GuildID, status.ChannelID)
 		}
 	}
-	writeSuccessResponse(w, out)
+	return out
+}
+
+func (s *Server) handleBotStatus(w http.ResponseWriter, r *http.Request) {
+	writeSuccessResponse(w, s.botStatusResponse())
+}
+
+type botJoinRequest struct {
+	ChannelID *string `json:"channelId"`
+}
+
+func (s *Server) handleBotJoin(w http.ResponseWriter, r *http.Request) {
+	lang := languageFor(r)
+
+	in := new(botJoinRequest)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(in); err != nil && !errors.Is(err, io.EOF) {
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_body")
+		return
+	}
+
+	var err error
+	if in.ChannelID == nil {
+		err = s.bot.JoinOwner(r.Context())
+	} else {
+		channelID, parseErr := snowflake.Parse(*in.ChannelID)
+		if parseErr != nil || channelID == 0 {
+			writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_body")
+			return
+		}
+
+		err = s.bot.JoinChannel(r.Context(), channelID)
+	}
+	if err != nil {
+		writeVoiceError(w, lang, err)
+		return
+	}
+
+	writeSuccessResponse(w, s.botStatusResponse())
+}
+
+func (s *Server) handleBotLeave(w http.ResponseWriter, r *http.Request) {
+	if err := s.bot.Leave(); err != nil {
+		writeVoiceError(w, languageFor(r), err)
+		return
+	}
+
+	writeSuccessResponse(w, s.botStatusResponse())
+}
+
+func writeVoiceError(w http.ResponseWriter, lang language.Tag, err error) {
+	switch {
+	case errors.Is(err, bot.ErrNotReady):
+		writeErrorMessage(w, http.StatusServiceUnavailable, lang, "bot_not_ready")
+	case errors.Is(err, bot.ErrChannelNotFound):
+		writeErrorMessage(w, http.StatusNotFound, lang, "channel_not_found")
+	case errors.Is(err, bot.ErrOwnerNotInVoice):
+		writeErrorMessage(w, http.StatusConflict, lang, "owner_not_in_voice")
+	case errors.Is(err, bot.ErrOwnerUnknown):
+		writeErrorMessage(w, http.StatusConflict, lang, "owner_unknown")
+	case errors.Is(err, bot.ErrNotVoiceChannel):
+		writeErrorMessage(w, http.StatusUnprocessableEntity, lang, "not_voice_channel")
+	case errors.Is(err, bot.ErrJoinFailed):
+		writeErrorMessage(w, http.StatusBadGateway, lang, "voice_join_failed")
+	default:
+		slog.Error("voice request failed", "err", err)
+		writeErrorMessage(w, http.StatusInternalServerError, lang, "unknown_error")
+	}
 }
 
 func (s *Server) allowedContentHosts() map[string]struct{} {
