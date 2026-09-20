@@ -216,6 +216,7 @@ func initConfig() {
 		"-", "_",
 	)
 	viper.SetEnvKeyReplacer(replacer)
+	viper.SetEnvPrefix("PBB")
 	viper.AutomaticEnv()
 
 	readErr := viper.ReadInConfig()

@@ -29,13 +29,15 @@ Note the key there has to be `golang`, not `go`: mise accepts either, but `actio
 
 Config is loaded via Viper from (in order of precedence) CLI flags, environment variables, then a YAML file (`.peace-breaker-bot.yaml` in `$HOME` or the cwd; see `.peace-breaker-bot.sample.yaml` for the schema). Required settings:
 
-- `bot.owner` / `--bot-owner` / `BOT_OWNER` — the only Discord username the bot will respond to.
-- `bot.token` / `--bot-token` / `BOT_TOKEN` — Discord bot OAuth token.
-- `server.address` / `--server-address` / `SERVER_ADDRESS` — address the HTTP API binds to (e.g. `0.0.0.0:9001`).
+- `bot.owner` / `--bot-owner` / `PBB_BOT_OWNER` — the only Discord username the bot will respond to.
+- `bot.token` / `--bot-token` / `PBB_BOT_TOKEN` — Discord bot OAuth token.
+- `server.address` / `--server-address` / `PBB_SERVER_ADDRESS` — address the HTTP API binds to (e.g. `0.0.0.0:9001`).
 
-`cmd/root.go` fails fast (before starting anything) if any of these three are missing. `bot.locale` / `--bot-locale` / `BOT_LOCALE` is optional — see "Internationalization" below. So is `log.level` / `--log-level` / `LOG_LEVEL` — see "Logging" below.
+`cmd/root.go` fails fast (before starting anything) if any of these three are missing. `bot.locale` / `--bot-locale` / `PBB_BOT_LOCALE` is optional — see "Internationalization" below. So is `log.level` / `--log-level` / `PBB_LOG_LEVEL` — see "Logging" below.
 
-`PUID`/`PGID` are read directly via `os.Getenv` in `cmd/root.go`, not through Viper — they're Docker plumbing (which host uid/gid ends up owning the instant cache), not app config, and only do anything when the process starts as root. See "Distribution" below for what they're for.
+Every setting's environment variable carries a `PBB_` prefix (`viper.SetEnvPrefix("PBB")` in `initConfig`), so the key `bot.token` reads `PBB_BOT_TOKEN`; the bare names (`BOT_TOKEN`, …) are no longer read. The prefix keeps the app's variables from colliding with unrelated ones in the same environment.
+
+`PUID`/`PGID` are read directly via `os.Getenv` in `cmd/root.go`, not through Viper — they're Docker plumbing (which host uid/gid ends up owning the instant cache), not app config, so they stay unprefixed like every other image that honours them, and only do anything when the process starts as root. See "Distribution" below for what they're for.
 
 ## Architecture
 
@@ -51,7 +53,7 @@ Entry point `main.go` → `cmd.Execute()` (Cobra root command in `cmd/root.go`) 
 
 ## Logging
 
-Logging is stdlib `log/slog`, called through the package-level functions (`slog.Debug(...)`), not injected loggers. `pkg/logging` builds the default handler and owns `log.level` (`debug`/`info`/`warn`/`error`, case-insensitive, default `info`). The level lives in a `slog.LevelVar` so `initConfig` can apply it after the handler exists; an invalid value is rejected by `runRootCmd` before anything starts, not by `initConfig`, so `--help`/`--version` still work with a bad `LOG_LEVEL`.
+Logging is stdlib `log/slog`, called through the package-level functions (`slog.Debug(...)`), not injected loggers. `pkg/logging` builds the default handler and owns `log.level` (`debug`/`info`/`warn`/`error`, case-insensitive, default `info`). The level lives in a `slog.LevelVar` so `initConfig` can apply it after the handler exists; an invalid value is rejected by `runRootCmd` before anything starts, not by `initConfig`, so `--help`/`--version` still work with a bad `PBB_LOG_LEVEL`.
 
 - **Don't derive a logger at package scope** (`var log = slog.Default().With(...)`): it runs before `SetDefault` and would keep the wrong handler for the life of the process. Call `slog.X` at the call site.
 - **disgo is capped at INFO** (`logging.Floor` passed through `bot.WithLogger` in `Bot.Start`), whatever `log.level` says. At DEBUG disgo logs REST request/response bodies and voice-gateway payloads, and those carry the voice token. `debug` means this app's own lines.
