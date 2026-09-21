@@ -1,6 +1,8 @@
 package bot
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"regexp"
 
@@ -48,5 +50,7 @@ func (b *Bot) handleInviteDM(e *events.MessageCreate) {
 	}
 
 	slog.Debug("invite targets a voice channel", "code", code, "guildId", invite.Guild.ID, "channelId", invite.Channel.ID, "channelType", invite.Channel.Type)
-	b.joinVoiceChannel(client, invite.Guild.ID, invite.Channel.ID, invite.Channel.Name)
+	if err := b.connect(context.Background(), client, invite.Channel.ID); err != nil && !errors.Is(err, ErrJoinFailed) {
+		slog.Info("could not join invite channel", "channelId", invite.Channel.ID, "err", err)
+	}
 }

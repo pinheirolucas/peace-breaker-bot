@@ -126,7 +126,7 @@ func TestHandleInstantListMapsProviderErrorsToTheirStatusCodes(t *testing.T) {
 }
 
 func TestHandleInstantListUsesARealMyInstantsProviderByDefault(t *testing.T) {
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	p, ok := s.providers().Get("myinstants")
 	if !ok {
@@ -138,7 +138,7 @@ func TestHandleInstantListUsesARealMyInstantsProviderByDefault(t *testing.T) {
 }
 
 func TestHandleInstantContentRejectsAHostNoProviderAllows(t *testing.T) {
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	const link = "https://evil.example.com/a.mp3"
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
@@ -208,7 +208,7 @@ func TestHandleListProvidersListsEveryRegisteredProviderSortedByKey(t *testing.T
 }
 
 func TestHandleListProvidersIncludesEveryRealProvider(t *testing.T) {
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	rec := httptest.NewRecorder()
 	s.handleListProviders(rec, httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil))

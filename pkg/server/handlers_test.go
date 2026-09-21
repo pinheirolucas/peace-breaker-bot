@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/disgoorg/snowflake/v2"
+
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
@@ -23,23 +26,44 @@ import (
 func serverAllowingHost(host string) *Server {
 	return &Server{
 		player:   instant.NewPlayer(),
-		bot:      connectedBotStatus(),
+		bot:      connectedBot(),
 		registry: provider.Registry{"test": &fakeProvider{key: "test", hosts: []string{host}}},
 	}
 }
 
-type fakeBotStatus struct {
+type fakeBot struct {
 	status      bot.VoiceStatus
 	identity    bot.Identity
 	hasIdentity bool
+
+	joinErr       error
+	leaveErr      error
+	joinedOwner   int
+	joinedChannel snowflake.ID
+	left          int
 }
 
-func (f *fakeBotStatus) Status() bot.VoiceStatus { return f.status }
+func (f *fakeBot) Status() bot.VoiceStatus { return f.status }
 
-func (f *fakeBotStatus) Identity() (bot.Identity, bool) { return f.identity, f.hasIdentity }
+func (f *fakeBot) Identity() (bot.Identity, bool) { return f.identity, f.hasIdentity }
 
-func connectedBotStatus() *fakeBotStatus {
-	return &fakeBotStatus{status: bot.VoiceStatus{Connected: true}}
+func (f *fakeBot) JoinOwner(ctx context.Context) error {
+	f.joinedOwner++
+	return f.joinErr
+}
+
+func (f *fakeBot) JoinChannel(ctx context.Context, channelID snowflake.ID) error {
+	f.joinedChannel = channelID
+	return f.joinErr
+}
+
+func (f *fakeBot) Leave() error {
+	f.left++
+	return f.leaveErr
+}
+
+func connectedBot() *fakeBot {
+	return &fakeBot{status: bot.VoiceStatus{Connected: true}}
 }
 
 // seedCache points the shared fsutil cache at a temp dir holding a fixture for
@@ -77,7 +101,7 @@ func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 }
 
 func TestHandleInstantContentRejectsAnUnusableURL(t *testing.T) {
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/not-a-url/content", nil)
 	req.SetPathValue("url", "not-a-url")
@@ -226,7 +250,7 @@ func TestHandleInstantContentRejectsNonMp3Content(t *testing.T) {
 }
 
 func TestHandleBotPlayRejectsAnInvalidBody(t *testing.T) {
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader("not json")))
@@ -240,7 +264,7 @@ func TestHandleBotPlayRejectsAnInvalidBody(t *testing.T) {
 }
 
 func TestHandleBotPlayRejectsAnInvalidURL(t *testing.T) {
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"not a url"}`)))
@@ -265,7 +289,7 @@ func TestHandleBotPlayRejectsWhenTheBotHasNoVoiceConnection(t *testing.T) {
 
 	link := upstream.URL + "/does-not-exist.mp3"
 
-	s := New(instant.NewPlayer(), &fakeBotStatus{status: bot.VoiceStatus{Connected: false}})
+	s := New(instant.NewPlayer(), &fakeBot{status: bot.VoiceStatus{Connected: false}})
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
@@ -290,7 +314,7 @@ func TestHandleBotPlayReportsANotFoundClipAs404(t *testing.T) {
 
 	link := upstream.URL + "/does-not-exist.mp3"
 
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
@@ -319,7 +343,7 @@ func TestHandleBotPlayReturnsOnlyOneResponseForUnsupportedAudio(t *testing.T) {
 
 	link := upstream.URL + "/a.mp3"
 
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
@@ -346,7 +370,7 @@ func TestHandleBotPlayReturnsTheExitReasonWhenPlaybackEnds(t *testing.T) {
 	seedCache(t, link)
 
 	player := instant.NewPlayer()
-	s := New(player, connectedBotStatus())
+	s := New(player, connectedBot())
 
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
@@ -379,7 +403,7 @@ func TestHandleBotStopReleasesAnInFlightPlay(t *testing.T) {
 	seedCache(t, link)
 
 	player := instant.NewPlayer()
-	s := New(player, connectedBotStatus())
+	s := New(player, connectedBot())
 
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
@@ -406,7 +430,7 @@ func TestHandleBotStopReleasesAnInFlightPlay(t *testing.T) {
 }
 
 func TestHandleBotStopIsSafeWhenNothingIsPlaying(t *testing.T) {
-	s := New(instant.NewPlayer(), connectedBotStatus())
+	s := New(instant.NewPlayer(), connectedBot())
 
 	rec := httptest.NewRecorder()
 	s.handleBotStop(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/stop", nil))
@@ -424,7 +448,7 @@ func TestHandleBotStatusReflectsAConnectedBot(t *testing.T) {
 		ChannelID:   456,
 		ChannelName: "General",
 	}
-	s := New(instant.NewPlayer(), &fakeBotStatus{status: status})
+	s := New(instant.NewPlayer(), &fakeBot{status: status})
 
 	rec := httptest.NewRecorder()
 	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
@@ -455,7 +479,7 @@ func TestHandleBotStatusReflectsAConnectedBot(t *testing.T) {
 
 func TestHandleBotStatusOmitsEmptyNamesWhenConnectedWithNoCacheHit(t *testing.T) {
 	status := bot.VoiceStatus{Connected: true, GuildID: 123, ChannelID: 456}
-	s := New(instant.NewPlayer(), &fakeBotStatus{status: status})
+	s := New(instant.NewPlayer(), &fakeBot{status: status})
 
 	rec := httptest.NewRecorder()
 	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
@@ -476,7 +500,7 @@ func TestHandleBotStatusOmitsEmptyNamesWhenConnectedWithNoCacheHit(t *testing.T)
 }
 
 func TestHandleBotStatusReflectsADisconnectedBot(t *testing.T) {
-	s := New(instant.NewPlayer(), &fakeBotStatus{status: bot.VoiceStatus{Connected: false}})
+	s := New(instant.NewPlayer(), &fakeBot{status: bot.VoiceStatus{Connected: false}})
 
 	rec := httptest.NewRecorder()
 	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
@@ -503,7 +527,7 @@ func testIdentity() bot.Identity {
 }
 
 func TestHandleBotStatusReportsTheBotIdentityWhileDisconnected(t *testing.T) {
-	s := New(instant.NewPlayer(), &fakeBotStatus{identity: testIdentity(), hasIdentity: true})
+	s := New(instant.NewPlayer(), &fakeBot{identity: testIdentity(), hasIdentity: true})
 
 	rec := httptest.NewRecorder()
 	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
@@ -538,7 +562,7 @@ func TestHandleBotStatusReportsTheBotIdentityWhileDisconnected(t *testing.T) {
 }
 
 func TestHandleBotStatusOmitsTheBotBeforeTheGatewayIsReady(t *testing.T) {
-	s := New(instant.NewPlayer(), &fakeBotStatus{status: bot.VoiceStatus{Connected: false}})
+	s := New(instant.NewPlayer(), &fakeBot{status: bot.VoiceStatus{Connected: false}})
 
 	rec := httptest.NewRecorder()
 	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
@@ -555,7 +579,7 @@ func TestHandleBotStatusOmitsTheBotBeforeTheGatewayIsReady(t *testing.T) {
 func TestHandleBotStatusOmitsAnEmptyAvatarURL(t *testing.T) {
 	identity := testIdentity()
 	identity.AvatarURL = ""
-	s := New(instant.NewPlayer(), &fakeBotStatus{identity: identity, hasIdentity: true})
+	s := New(instant.NewPlayer(), &fakeBot{identity: identity, hasIdentity: true})
 
 	rec := httptest.NewRecorder()
 	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))
@@ -569,7 +593,7 @@ func TestHandleBotStatusOmitsAnEmptyAvatarURL(t *testing.T) {
 
 func TestHandleBotStatusLinksToTheConnectedChannel(t *testing.T) {
 	status := bot.VoiceStatus{Connected: true, GuildID: 123, ChannelID: 456}
-	s := New(instant.NewPlayer(), &fakeBotStatus{status: status, identity: testIdentity(), hasIdentity: true})
+	s := New(instant.NewPlayer(), &fakeBot{status: status, identity: testIdentity(), hasIdentity: true})
 
 	rec := httptest.NewRecorder()
 	s.handleBotStatus(rec, httptest.NewRequest(http.MethodGet, "/api/v1/bot/status", nil))

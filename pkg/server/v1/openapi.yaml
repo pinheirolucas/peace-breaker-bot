@@ -91,7 +91,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 botNotConnected:
-                  value: { label: bot_not_connected, message: "The bot isn't in a voice channel yet — send !join from the channel you want it in." }
+                  value: { label: bot_not_connected, message: "The bot isn't in a voice channel yet — make it join one first." }
         "422":
           description: The downloaded file did not sniff as mp3.
           content:
@@ -123,6 +123,174 @@ paths:
       responses:
         "200":
           description: Empty body; no Content-Type is set. Always this status.
+
+  /api/v1/bot/join:
+    post:
+      operationId: botJoin
+      summary: Move the bot into a voice channel
+      description: |
+        With no body (or `{}`), joins the voice channel the bot's owner is in
+        right now, like the `!join` chat command. With a `channelId`, joins
+        that channel wherever the owner is. A channel ID is unique across
+        Discord, so no server ID is needed. There is no lookup by name over
+        HTTP; only the `!join` chat command takes one.
+
+        If the bot is already in a channel, it leaves that channel and joins
+        the target, exactly as `POST /api/v1/bot/leave` would: the clip that
+        is playing stops, and a `POST /api/v1/bot/play` in flight returns
+        `exitReason: "stop"`. If the target is the channel it is already in,
+        nothing happens and the clip is not interrupted. If joining the new
+        channel fails, the bot has already left the old one and stays
+        disconnected.
+
+        Answers once the voice connection is ready to play, waiting up to 10
+        seconds for the handshake.
+
+        Following the owner needs the bot to know the owner's user ID, which
+        it learns from the owner's messages (`bot.owner` is a username). After
+        a restart it answers `409 owner_unknown` until the owner has sent the
+        bot any message, such as `!ping`. Joining by `channelId` never needs
+        this.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotJoinRequest"
+            examples:
+              followTheOwner:
+                summary: No body; join the owner's channel
+                value: {}
+              byId:
+                summary: Join a specific channel
+                value: { channelId: "234567890123456789" }
+      responses:
+        "200":
+          description: "The bot is in the target channel — freshly joined, moved from another channel, or already there. The body is the same snapshot as `GET /api/v1/bot/status`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotStatusEnvelope"
+              examples:
+                joined:
+                  value:
+                    data:
+                      connected: true
+                      bot:
+                        id: "345678901234567890"
+                        username: "peace-breaker"
+                        displayName: "peace-breaker"
+                        profileUrl: "https://discord.com/users/345678901234567890"
+                        inviteUrl: "https://discord.com/oauth2/authorize?client_id=345678901234567890&scope=bot&permissions=3214336"
+                      guildId: "123456789012345678"
+                      guildName: "My Server"
+                      channelId: "234567890123456789"
+                      channelName: "instants"
+                      channelUrl: "https://discord.com/channels/123456789012345678/234567890123456789"
+        "400":
+          description: "The body isn't JSON, has a field other than `channelId`, or `channelId` isn't a snowflake. An empty body is not an error."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                invalidBody:
+                  value: { label: invalid_body, message: "Invalid request" }
+        "404":
+          description: "`channelId` matches no channel in any server the bot is in."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                channelNotFound:
+                  value: { label: channel_not_found, message: "That voice channel couldn't be found" }
+        "409":
+          description: |
+            Only when following the owner (no `channelId`): the owner is not in a voice channel the bot can see (`owner_not_in_voice`), or the bot has not seen the owner yet (`owner_unknown`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                ownerNotInVoice:
+                  value: { label: owner_not_in_voice, message: "The bot's owner isn't in a voice channel the bot can see" }
+                ownerUnknown:
+                  value: { label: owner_unknown, message: "The bot hasn't seen its owner yet. Send it any message on Discord, then try again" }
+        "422":
+          description: "`channelId` is a real channel but not a voice or stage channel."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                notVoiceChannel:
+                  value: { label: not_voice_channel, message: "That channel isn't a voice channel" }
+        "500":
+          description: "Anything else."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                unknownError:
+                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment" }
+        "502":
+          description: "Discord refused the connection or the handshake timed out (missing Connect permission, full channel, …). If the bot was in another channel it has left it."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                voiceJoinFailed:
+                  value: { label: voice_join_failed, message: "The bot couldn't connect to that voice channel" }
+        "503":
+          description: "The gateway hasn't sent `READY` since startup."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                botNotReady:
+                  value: { label: bot_not_ready, message: "The bot is still starting up. Try again in a moment" }
+
+  /api/v1/bot/leave:
+    post:
+      operationId: botLeave
+      summary: Stop playback and leave the voice channel
+      description: |
+        Does what the `!leave` chat command does: if the bot is in any
+        channel, stops the clip that is playing, closes the voice connection
+        and clears it. A `POST /api/v1/bot/play` in flight returns
+        `exitReason: "stop"`. Takes no body. Idempotent, so leaving while
+        already disconnected is a success.
+      responses:
+        "200":
+          description: "The bot is disconnected. The body is the same snapshot as `GET /api/v1/bot/status`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotStatusEnvelope"
+              examples:
+                left:
+                  value:
+                    data:
+                      connected: false
+                      bot:
+                        id: "345678901234567890"
+                        username: "peace-breaker"
+                        displayName: "peace-breaker"
+                        profileUrl: "https://discord.com/users/345678901234567890"
+                        inviteUrl: "https://discord.com/oauth2/authorize?client_id=345678901234567890&scope=bot&permissions=3214336"
+        "503":
+          description: "The gateway hasn't sent `READY` since startup."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                botNotReady:
+                  value: { label: bot_not_ready, message: "The bot is still starting up. Try again in a moment" }
 
   /api/v1/bot/status:
     get:
@@ -436,6 +604,16 @@ components:
           type: string
           format: uri
           description: The myinstants.com clip URL to play.
+
+    BotJoinRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        channelId:
+          type: string
+          description: >-
+            The voice or stage channel to join, as a snowflake string. Omit it
+            (or send no body) to join the channel the bot's owner is in.
 
     BotPlaySuccessEnvelope:
       allOf:
