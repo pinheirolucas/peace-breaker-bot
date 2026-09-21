@@ -12,12 +12,12 @@ A Go application that runs a Discord bot capable of joining a voice channel and 
 make build   # go build -o ./bin/peace-breaker-bot <module>
 make run     # build then run the binary
 make test    # go test ./...
-make lint    # golangci-lint run ./... (needs golangci-lint v2 on PATH)
+make lint    # golangci-lint run ./... (version pinned in .tool-versions)
 make cover   # go test -coverprofile cp.out ./... && go tool cover -html=cp.out
 make clean   # go clean; remove ./bin, cp.out, nohup.out
 ```
 
-Lint config is `.golangci.yml` (golangci-lint v2 format: the `standard` linters plus `bodyclose`, gofmt as a formatter, test files exempt from `errcheck`/`bodyclose`). CI's `lint` job pins the version in `ci.yaml`; keep local installs on the same major. `misspell` is deliberately off — it flags the Portuguese catalog in `pkg/i18n/pt_br.go`.
+Lint config is `.golangci.yml` (golangci-lint v2 format: the `standard` linters plus `bodyclose`, gofmt as a formatter, test files exempt from `errcheck`/`bodyclose`). The version is pinned in `.tool-versions` next to Go; mise/asdf install it locally and CI's `lint` job reads the same line, so bump it in one place. `misspell` is deliberately off — it flags the Portuguese catalog in `pkg/i18n/pt_br.go`.
 
 Run a single test package/test directly with the standard Go toolchain, e.g. `go test ./pkg/instant/... -run TestName -v`.
 
@@ -25,7 +25,7 @@ The Go toolchain is pinned in `.tool-versions` (the asdf format, which mise and 
 `actions/setup-go` accepts via `go-version-file`). The `go` directive in `go.mod` states the minimum
 language version the module requires and is a separate knob — bumping one does not bump the other.
 
-Note the key there has to be `golang`, not `go`: mise accepts either, but `actions/setup-go` matches only
+The file also pins `golangci-lint` (see above). Note the Go key there has to be `golang`, not `go`: mise accepts either, but `actions/setup-go` matches only
 `golang`.
 
 ## Configuration

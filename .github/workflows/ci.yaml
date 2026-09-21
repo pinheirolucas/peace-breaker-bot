@@ -64,10 +64,14 @@ jobs:
         with:
           go-version-file: .tool-versions
 
+      - name: Read golangci-lint version
+        id: golangci
+        run: echo "version=v$(awk '$1 == "golangci-lint" { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
+
       - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.2
+          version: ${{ steps.golangci.outputs.version }}
 
   govulncheck:
     runs-on: ubuntu-latest
