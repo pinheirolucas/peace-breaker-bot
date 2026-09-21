@@ -57,25 +57,25 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.peace-breaker-bot.yaml)")
 
 	rootCmd.PersistentFlags().String("bot-owner", "", "bot owner username")
-	viper.BindPFlag("bot.owner", rootCmd.PersistentFlags().Lookup("bot-owner"))
+	cobra.CheckErr(viper.BindPFlag("bot.owner", rootCmd.PersistentFlags().Lookup("bot-owner")))
 
 	rootCmd.PersistentFlags().String("bot-token", "", "application oauth token to authenticate the bot")
-	viper.BindPFlag("bot.token", rootCmd.PersistentFlags().Lookup("bot-token"))
+	cobra.CheckErr(viper.BindPFlag("bot.token", rootCmd.PersistentFlags().Lookup("bot-token")))
 
 	rootCmd.PersistentFlags().String("server-address", "", "address to bind the http server")
-	viper.BindPFlag("server.address", rootCmd.PersistentFlags().Lookup("server-address"))
+	cobra.CheckErr(viper.BindPFlag("server.address", rootCmd.PersistentFlags().Lookup("server-address")))
 
 	rootCmd.PersistentFlags().String("bot-locale", "", "fixes the bot's response language (e.g. en-US, pt-BR); defaults to the invoking guild's own locale")
-	viper.BindPFlag("bot.locale", rootCmd.PersistentFlags().Lookup("bot-locale"))
+	cobra.CheckErr(viper.BindPFlag("bot.locale", rootCmd.PersistentFlags().Lookup("bot-locale")))
 
 	rootCmd.PersistentFlags().String("log-level", "", "log verbosity: debug, info, warn or error (default info)")
-	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
+	cobra.CheckErr(viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level")))
 
 	rootCmd.PersistentFlags().String("log-format", "", "log layout: text or json (default text)")
-	viper.BindPFlag("log.format", rootCmd.PersistentFlags().Lookup("log-format"))
+	cobra.CheckErr(viper.BindPFlag("log.format", rootCmd.PersistentFlags().Lookup("log-format")))
 
 	rootCmd.PersistentFlags().String("log-color", "", "colored logs: auto, always or never (default auto)")
-	viper.BindPFlag("log.color", rootCmd.PersistentFlags().Lookup("log-color"))
+	cobra.CheckErr(viper.BindPFlag("log.color", rootCmd.PersistentFlags().Lookup("log-color")))
 }
 
 func runRootCmd(cmd *cobra.Command, args []string) error {

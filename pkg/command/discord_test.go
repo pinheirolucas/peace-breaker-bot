@@ -135,7 +135,7 @@ func TestGetHelpListsCommandsInRegistrationOrder(t *testing.T) {
 	if pingIdx == -1 || joinIdx == -1 || leaveIdx == -1 {
 		t.Fatalf("GetHelp() missing a registered command:\n%s", help)
 	}
-	if !(pingIdx < joinIdx && joinIdx < leaveIdx) {
+	if pingIdx >= joinIdx || joinIdx >= leaveIdx {
 		t.Errorf("GetHelp() order = ping@%d, join@%d, leave@%d; want registration order", pingIdx, joinIdx, leaveIdx)
 	}
 }

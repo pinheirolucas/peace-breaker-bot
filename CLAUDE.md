@@ -12,9 +12,12 @@ A Go application that runs a Discord bot capable of joining a voice channel and 
 make build   # go build -o ./bin/peace-breaker-bot <module>
 make run     # build then run the binary
 make test    # go test ./...
+make lint    # golangci-lint run ./... (needs golangci-lint v2 on PATH)
 make cover   # go test -coverprofile cp.out ./... && go tool cover -html=cp.out
 make clean   # go clean; remove ./bin, cp.out, nohup.out
 ```
+
+Lint config is `.golangci.yml` (golangci-lint v2 format: the `standard` linters plus `bodyclose`, gofmt as a formatter, test files exempt from `errcheck`/`bodyclose`). CI's `lint` job pins the version in `ci.yaml`; keep local installs on the same major. `misspell` is deliberately off — it flags the Portuguese catalog in `pkg/i18n/pt_br.go`.
 
 Run a single test package/test directly with the standard Go toolchain, e.g. `go test ./pkg/instant/... -run TestName -v`.
 

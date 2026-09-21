@@ -80,7 +80,7 @@ func (p *Provider) List(params provider.ListParams) (*provider.ListResult, error
 	}
 
 	var listURL string
-	search := strings.Replace(strings.TrimSpace(params.Search), " ", "+", -1)
+	search := strings.ReplaceAll(strings.TrimSpace(params.Search), " ", "+")
 	if search != "" {
 		listURL = p.baseURL() + "/search/?page=" + strconv.Itoa(page) + "&name=" + search
 	} else {

@@ -12,6 +12,9 @@ run: build
 test:
 	go test -race -timeout 90s ./...
 
+lint:
+	golangci-lint run ./...
+
 cover:
 	go test -coverprofile cp.out ./...
 	go tool cover -html=cp.out
