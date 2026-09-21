@@ -52,6 +52,23 @@ jobs:
           CGO_ENABLED: "0"
         run: go vet ./...
 
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up repo
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: .tool-versions
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version-file: .tool-versions
+
   govulncheck:
     runs-on: ubuntu-latest
 

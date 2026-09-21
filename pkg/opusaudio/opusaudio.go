@@ -5,6 +5,7 @@ package opusaudio
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -28,9 +29,9 @@ var OnError = func(str string, err error) {
 	prefix := "opusaudio: " + str
 
 	if err != nil {
-		os.Stderr.WriteString(prefix + ": " + err.Error() + "\n")
+		fmt.Fprintln(os.Stderr, prefix+": "+err.Error())
 	} else {
-		os.Stderr.WriteString(prefix + "\n")
+		fmt.Fprintln(os.Stderr, prefix)
 	}
 }
 

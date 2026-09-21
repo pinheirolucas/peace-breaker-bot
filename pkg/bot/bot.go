@@ -203,7 +203,7 @@ func (b *Bot) Start() error {
 	slog.Info("bot is now running", "version", b.version)
 
 	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
 	return errors.New("application is shutting down")
