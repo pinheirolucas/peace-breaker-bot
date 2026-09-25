@@ -25,6 +25,20 @@ jobs:
       - name: Test
         run: make test
 
+  stale-names:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up repo
+        uses: actions/checkout@v7
+
+      - name: Reject pre-rename product names
+        run: |
+          if git grep -nIiE 'discord[_-]instants[_-]player' -- ':!.github/workflows/ci.yaml'; then
+            echo "::error::Found the old product name. Use peace-breaker-bot instead."
+            exit 1
+          fi
+
   vet:
     runs-on: ubuntu-latest
     strategy:
