@@ -85,19 +85,31 @@ func (s *Server) providerKeys() []string {
 	return keys
 }
 
+type route struct {
+	pattern string
+	handler http.HandlerFunc
+}
+
+func (s *Server) routes() []route {
+	return []route{
+		{"POST /api/v1/bot/play", s.handleBotPlay},
+		{"POST /api/v1/bot/stop", s.handleBotStop},
+		{"POST /api/v1/bot/join", s.handleBotJoin},
+		{"POST /api/v1/bot/leave", s.handleBotLeave},
+		{"GET /api/v1/bot/status", s.handleBotStatus},
+		{"GET /api/v1/instants", s.handleListInstants},
+		{"GET /api/v1/instants/{url}/content", s.handleInstantContent},
+		{"GET /api/v1/providers", s.handleListProviders},
+		{"GET /api/v1/openapi.yaml", s.handleOpenAPISpec},
+		{"GET /api/docs", s.handleDocs},
+	}
+}
+
 func (s *Server) Start(address string) error {
 	r := http.NewServeMux()
-
-	r.HandleFunc("POST /api/v1/bot/play", s.handleBotPlay)
-	r.HandleFunc("POST /api/v1/bot/stop", s.handleBotStop)
-	r.HandleFunc("POST /api/v1/bot/join", s.handleBotJoin)
-	r.HandleFunc("POST /api/v1/bot/leave", s.handleBotLeave)
-	r.HandleFunc("GET /api/v1/bot/status", s.handleBotStatus)
-	r.HandleFunc("GET /api/v1/instants", s.handleListInstants)
-	r.HandleFunc("GET /api/v1/instants/{url}/content", s.handleInstantContent)
-	r.HandleFunc("GET /api/v1/providers", s.handleListProviders)
-	r.HandleFunc("GET /api/v1/openapi.yaml", s.handleOpenAPISpec)
-	r.HandleFunc("GET /api/docs", s.handleDocs)
+	for _, rt := range s.routes() {
+		r.HandleFunc(rt.pattern, rt.handler)
+	}
 
 	srv := &http.Server{
 		Handler: loggingMiddleware(corsMiddleware(r)),
