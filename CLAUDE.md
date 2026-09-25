@@ -13,9 +13,8 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
 
 ## Workflow
 
-- Never run the app from this directory (`make run`, `go run .`, `./bin/...`): the repo root holds the
-  real `.peace-breaker-bot.yaml` with a live token. To see output, build to a scratch path and run it
-  in an empty directory with `HOME` pointed there; it exits at "bot token not provided".
+- Never run the app from this directory: the repo root holds the real `.peace-breaker-bot.yaml` with a
+  live token. Use the `run-safely` skill to see real output.
 - New endpoint or command: publish the interface as an artifact and wait for sign-off before coding.
 - Comments: only on exported identifiers, one direct line. None in tests, none explaining why
   something is logged. Reasoning goes in the PR body.
@@ -24,17 +23,16 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
   Merge commits, no squash. Commit subject: imperative, sentence case, no prefix; body says why.
 - PR body: `## Summary`, `## Test plan` (commands run), `## Not verified`,
   `Other repo: none | peace-breaker-bot-desktop#N`. Backend PRs land before the desktop PRs using them.
-- Release: Actions › Cut Release (dry run first). Never tag by hand; the tag is the version.
+- Release: the Cut Release workflow (see the `cut-release` skill). Never tag by hand; the tag is the version.
 
-## Update together
+## Tooling
 
-- Route, status code, label or request shape → `pkg/server/v1/openapi.yaml` (hand-written; no test
-  checks it against the handlers), both i18n catalogs, tests, and the desktop's `src/service.ts`.
-- Config key → `cmd/root.go` (flag, validation in `runRootCmd`), `.peace-breaker-bot.sample.yaml`,
-  README table.
-- Chat command → `Register` in `pkg/bot/bot.go` with a help key in both catalogs, README usage table.
-- New error case → map it in `pkg/server/server.go` to a real status and stable `label`, never the
-  generic 500.
+- Skills in `.claude/skills`: `add-endpoint`, `add-provider`, `add-config-setting`, `add-bot-command`,
+  `run-safely`, and `cut-release` (user-invoked only). Follow the matching one; it lists what to update.
+- Drift tests: `pkg/server/spec_test.go` (routes, operations and labels ↔ openapi.yaml and catalogs),
+  `cmd/docs_test.go` (flags ↔ sample config and README), `pkg/bot/docs_test.go` (commands ↔ help, README).
+- `.claude/settings.json` denies running the bot, force-push, tags and release workflows. Its hook runs
+  gofmt and go vet after each Go edit and flags comments the Workflow rule doesn't allow.
 
 ## Contract with the desktop app
 
@@ -68,7 +66,6 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
 - Every request goes through `pkg/httpclient` (UA `peace-breaker-bot/1.0`). Cloudflare 403s Go's
   default UA on myinstants.com, so never use `http.DefaultClient`. curl 403s regardless, so don't
   debug with it. If a site adds a bot wall, drop it; no CAPTCHA, proxies or headless browsers.
-- `testdata` fixtures are trimmed live captures made with the app UA. Re-capture; never hand-edit.
 
 ## Logging
 
