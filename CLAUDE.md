@@ -1,123 +1,98 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## What this is
-
-A Go application that runs a Discord bot capable of joining a voice channel and playing "instants" (short mp3 clips, originally from myinstants.com and now also scraped from a few other soundboard sites — see "Architecture"'s `pkg/provider` entry), plus an HTTP API used to control that bot. It is the backend for a separate Electron/React desktop UI that lives in a sibling repository, `../peace-breaker-bot-desktop` (see `CLAUDE.md` there).
+Go backend for Peace Breaker Bot: a Discord bot that plays short mp3 "instants" from myinstants.com,
+SoundboardGuy and Sound Buttons in a voice channel, plus an HTTP API that controls it. The client is
+the Electron/React app in `../peace-breaker-bot-desktop`.
 
 ## Commands
 
-```bash
-make build   # go build -o ./bin/peace-breaker-bot <module>
-make run     # build then run the binary
-make test    # go test ./...
-make lint    # golangci-lint run ./... (version pinned in .tool-versions)
-make cover   # go test -coverprofile cp.out ./... && go tool cover -html=cp.out
-make clean   # go clean; remove ./bin, cp.out, nohup.out
-```
+- `make build | test | lint | cover`. `make test` is `go test -race -timeout 90s ./...`.
+- `.tool-versions` is the one place for the Go and golangci-lint versions; CI reads it. The Go key
+  must be `golang`, not `go` (`actions/setup-go` ignores `go`). `go.mod`'s `go` line is separate.
+- `misspell` is off in `.golangci.yml` because it flags the Portuguese catalog.
 
-Lint config is `.golangci.yml` (golangci-lint v2 format: the `standard` linters plus `bodyclose`, gofmt as a formatter, test files exempt from `errcheck`/`bodyclose`). The version is pinned in `.tool-versions` next to Go; mise/asdf install it locally and CI's `lint` job reads the same line, so bump it in one place. `misspell` is deliberately off — it flags the Portuguese catalog in `pkg/i18n/pt_br.go`.
+## Workflow
 
-Run a single test package/test directly with the standard Go toolchain, e.g. `go test ./pkg/instant/... -run TestName -v`.
+- Never run the app from this directory: the repo root holds the real `.peace-breaker-bot.yaml` with a
+  live token. Use the `run-safely` skill to see real output.
+- New endpoint or command: publish the interface as an artifact and wait for sign-off before coding.
+- Comments: only on exported identifiers, one direct line. None in tests, none explaining why
+  something is logged. Reasoning goes in the PR body.
+- Startup output stays minimal: the one static banner, then normal slog lines. No taglines or animation.
+- Branch `type/kebab-slug`, one concern per PR; a big change is a stack ("Stacked on #N").
+  Merge commits, no squash. Commit subject: imperative, sentence case, no prefix; body says why.
+- PR body: `## Summary`, `## Test plan` (commands run), `## Not verified`,
+  `Other repo: none | peace-breaker-bot-desktop#N`. Backend PRs land before the desktop PRs using them.
+- Release: the Cut Release workflow (see the `cut-release` skill). Never tag by hand; the tag is the version.
 
-The Go toolchain is pinned in `.tool-versions` (the asdf format, which mise and asdf both read, and which
-`actions/setup-go` accepts via `go-version-file`). The `go` directive in `go.mod` states the minimum
-language version the module requires and is a separate knob — bumping one does not bump the other.
+## Tooling
 
-The file also pins `golangci-lint` (see above). Note the Go key there has to be `golang`, not `go`: mise accepts either, but `actions/setup-go` matches only
-`golang`.
+- Skills in `.claude/skills`: `add-endpoint`, `add-provider`, `add-config-setting`, `add-bot-command`,
+  `run-safely`, and `cut-release` (user-invoked only). Follow the matching one; it lists what to update.
+- Drift tests: `pkg/server/spec_test.go` (routes, operations and labels ↔ openapi.yaml and catalogs),
+  `cmd/docs_test.go` (flags ↔ sample config and README), `pkg/bot/docs_test.go` (commands ↔ help, README).
+- `.claude/settings.json` denies running the bot, force-push, tags and release workflows. Its hook runs
+  gofmt and go vet after each Go edit and flags comments the Workflow rule doesn't allow.
 
-## Configuration
+## Contract with the desktop app
 
-Config is loaded via Viper from (in order of precedence) CLI flags, environment variables, then a YAML file (`.peace-breaker-bot.yaml` in `$HOME` or the cwd; see `.peace-breaker-bot.sample.yaml` for the schema). Required settings:
+- The desktop never launches the bot. It finds it via mDNS `_myinstants._tcp` with TXT `path=/api`
+  and `api=1`, instance name `<hostname>-<port>` (clients match on it; don't change it), and appends
+  `/v1` itself. macOS `dns-sd` can't see the advertisement; debug with a client that reads the wire.
+- Errors are a real 4xx/5xx with `{label, message}`. The UI branches on status and `label`; `message`
+  is a fallback, so labels are stable API.
+- `GET /bot/status` is polled; `POST /bot/play` answers `409 bot_not_connected` with no voice connection.
+- `provider` defaults to `myinstants`; `region` is accepted and ignored by providers without regions.
 
-- `bot.owner` / `--bot-owner` / `PBB_BOT_OWNER` — the only Discord username the bot will respond to.
-- `bot.token` / `--bot-token` / `PBB_BOT_TOKEN` — Discord bot OAuth token.
-- `server.address` / `--server-address` / `PBB_SERVER_ADDRESS` — address the HTTP API binds to (e.g. `0.0.0.0:9001`).
+## Architecture (non-obvious parts only)
 
-`cmd/root.go` fails fast (before starting anything) if any of these three are missing. `bot.locale` / `--bot-locale` / `PBB_BOT_LOCALE` is optional — see "Internationalization" below. So are `log.level` / `--log-level` / `PBB_LOG_LEVEL`, `log.format` / `--log-format` / `PBB_LOG_FORMAT` and `log.color` / `--log-color` / `PBB_LOG_COLOR` — see "Logging" below.
+- `pkg/bot` uses disgo because discordgo has no DAVE/E2EE voice. dave-go is wired via
+  `voice.WithDaveSessionCreateFunc`, or Discord closes voice with 4017. `WithCacheConfigOpts` in
+  `Bot.Start` must keep guilds, channels and voice states cached (`!join`, locale).
+- "Invite to voice" arrives as a DM with an invite link, so DMs are matched for that and otherwise
+  ignored silently. Every join (chat, DM, HTTP) goes through `Bot.connect`.
+- Audio is pure Go and cgo-free: go-mp3 → linear resampler to 48kHz → pion/opus, pulled by disgo.
+- `pkg/instant.Player`: one shared player, newest request wins, ordered by ticket; `Stop` also
+  cancels downloads in flight. There is no queue; a replaced play returns `exitReason: "stop"`.
+- `pkg/provider`: one `Provider` per site. `List` returns sentinel errors that `server.go` maps to
+  statuses; `InferPages` guesses the page count. Only `myinstants` uses `Region`. Site quirks live in
+  each provider's package doc.
+- `/instants/{url}/content` enforces the providers' `AllowedContentHosts`; `/bot/play` doesn't.
+- Known gaps: `Bot.vc` isn't cleared on an external disconnect; following the owner answers
+  `owner_unknown` after a restart until the owner speaks.
 
-Every setting's environment variable carries a `PBB_` prefix (`viper.SetEnvPrefix("PBB")` in `initConfig`), so the key `bot.token` reads `PBB_BOT_TOKEN`; the bare names (`BOT_TOKEN`, …) are no longer read. The prefix keeps the app's variables from colliding with unrelated ones in the same environment.
+## Provider sites
 
-`PUID`/`PGID` are read directly via `os.Getenv` in `cmd/root.go`, not through Viper — they're Docker plumbing (which host uid/gid ends up owning the instant cache), not app config, so they stay unprefixed like every other image that honours them, and only do anything when the process starts as root. See "Distribution" below for what they're for.
-
-## Architecture
-
-Entry point `main.go` → `cmd.Execute()` (Cobra root command in `cmd/root.go`) parses config/flags and then starts two long-running goroutines against a single shared `*instant.Player`:
-
-- **`pkg/bot`** — the Discord client (`disgoorg/disgo`, migrated off `bwmarrin/discordgo` because it has no support for Discord's mandatory DAVE/E2EE voice protocol). `bot.New` registers chat commands (`!ping`, `!join`, `!help`) against a `command.DiscordDispatcher` (see `pkg/command/discord.go`), which does simple whitespace-tokenized string matching on `!command` prefixes to route messages — there's no argument parsing beyond splitting on spaces. `Register`'s second argument is a `pkg/i18n` key, not rendered text (see "Internationalization" below); `GetHelp` resolves it per call, since the response locale is only known at dispatch time. Only messages from `bot.owner` are dispatched (`handleMessages` in `pkg/bot/bot.go`). DMs never reach the `command.DiscordDispatcher` at all — instead, `handleMessages` checks whether the DM's content is a Discord invite link, since that's what the client's "invite to voice" quick-invite feature (the `+` icon next to a voice channel) actually sends the target — there's no dedicated API or gateway event for it, confirmed by capturing the actual DM payload. `handleInviteDM` (`pkg/bot/invite.go`) matches that link pattern, resolves it via `client.Rest.GetInvite`, and joins the invite's channel directly via `Bot.connect` (`pkg/bot/voice.go`, see below) — bypassing the guild member voice-state lookup `!join` relies on, since a DM has no guild member state to look up. `!join` with no argument joins the sender's voice channel; `!join #name` (case-insensitive, the first match by channel order among the invoking guild's voice and stage channels, taking the rest of the line so names can hold spaces) or `!join <#id>` (what Discord sends when the owner accepts a channel suggestion) joins that channel, and a failed join replies in chat with the same `pkg/i18n` labels the API uses. Every join — chat, DM invite and HTTP — goes through `Bot.connect` (`pkg/bot/voice.go`), which under `joinMu` no-ops for the channel the bot is already in and otherwise leaves the current one (stopping playback, like `!leave`) before joining the target, bounds the voice handshake at 10s, and closes the half-open connection on failure; a failed move therefore leaves the bot disconnected. Names never reach `connect`: the chat handler resolves them to a channel ID first (`pkg/bot/channel.go`). Any other DM is silently ignored, with no reply at all — the bot used to answer every DM with a refusal message, but that was dropped once DMs gained an actual purpose (the invite-link handling) rather than being uniformly out of scope. Guilds/channels/voice-states are uncached by disgo unless explicitly enabled (`bot.WithCacheConfigOpts` in `bot.Start()`) — `!join` depends on all three. Voice DAVE/E2EE encryption is handled by `thomas-vilte/dave-go` (a pure-Go DAVE implementation, wired in via `voice.WithDaveSessionCreateFunc` in `bot.Start()`) — without it, voice defaults to an unencrypted no-op session that Discord's gateway now rejects outright with close code `4017`. `Bot.Start()` runs a loop that blocks on `player.Next()` and streams the resulting file into the current voice connection via `pkg/opusaudio`, which decodes mp3 with the pure-Go `github.com/hajimehoshi/go-mp3` (chosen because the app only ever plays cached mp3 clips — see "Architecture" for `pkg/fsutil`'s format sniffing — so a full multi-format transcoding subprocess is more than the job needs), resamples to 48kHz with a small hand-rolled linear-interpolation `Resampler` (`pkg/opusaudio/resample.go`, since go-mp3 always decodes at the source's own rate, commonly 44.1kHz, and doesn't resample itself), and encodes to Opus with `github.com/pion/opus` (also pure Go). The whole pipeline is cgo-free and has no external runtime dependency, handing frames to disgo's voice package as a pull-based `OpusFrameProvider` (disgo pulls frames on its own 20ms clock, rather than accepting a push channel the way discordgo's voice API did).
-- **`pkg/provider`** — abstracts myinstants.com and the other clip sites behind one `Provider` interface (`Key`, `DisplayName`, `List(ListParams) (*ListResult, error)`, `AllowedContentHosts`, `SupportsRegion`), so `pkg/server` drives any of them through the same handler instead of a hand-rolled fetch/parse pipeline per site. Each site gets its own subpackage — `pkg/provider/myinstants`, `pkg/provider/soundboardguy`, `pkg/provider/soundbuttons` — that owns its own URL building, HTTP fetch and markup parsing end to end; `pkg/server` never sees the difference. A `Provider`'s `List` returns one of a handful of sentinel errors (`ErrInvalidRegion`, `ErrUnexpectedMarkup`, `ErrUpstreamUnavailable`, `ErrBadUpstreamStatus`) wrapped with `fmt.Errorf("%w: ...")` for detail, which `pkg/server/server.go`'s `handleListInstants` maps via `errors.Is` to the same HTTP status/label every provider shares — see "Talking to the provider sites" below for what each implementation actually has to work around. `provider.InferPages(page, count, pageSize)` is the shared "no site publishes a real page count" heuristic every implementation calls: a full page means there may be another, a short page means this is the last one, an empty page means the caller paged past the end. Only `myinstants` has any concept of `Region`; the others accept and ignore it rather than erroring, so a client switching providers without clearing every field doesn't get a 400 for it.
-- **`pkg/server`** — the HTTP API (stdlib `net/http.ServeMux` with Go 1.22 method patterns like `"POST /api/v1/bot/play"`; a small custom `corsMiddleware` in `pkg/server/cors.go` for CORS-with-`*`, replacing an earlier `gorilla/handlers` dependency). Routes are version-scoped under `/api/v1` (except `/api/docs`, see below): `POST /api/v1/bot/play` (play a URL through the bot, blocks until playback ends/stops and returns the exit reason; answers `409 bot_not_connected` before ever touching the player if the bot has no open voice connection — see below), `POST /api/v1/bot/stop`, `POST /api/v1/bot/join` (moves the bot into a voice channel and answers with the same snapshot as `/bot/status` once the connection is ready; an empty body or `{}` follows the owner, `{"channelId": "…"}` joins that channel, and there is deliberately no lookup by name over HTTP — a name has no server to be resolved in and a channel ID is unique across Discord; unknown fields are `400 invalid_body`; the owner is configured as a *username* but voice states are keyed by ID, so `Bot.ownerID` is learned from the owner's messages and DMs (`handleMessages`), and following the owner answers `409 owner_unknown` until the first one after a restart), `POST /api/v1/bot/leave` (stops playback and disconnects; idempotent, and it answers the same snapshot), `GET /api/v1/bot/status` (reports which bot this is and its current voice connection — `{connected, bot, guildId, guildName, channelId, channelName, channelUrl}`, names omitted while disconnected — so the UI can poll and gate its own "send to Discord" action before a click, rather than only reacting to a failed one; `bot` is `{id, username, displayName, avatarUrl, profileUrl, inviteUrl}` read from disgo's self-user cache, which the gateway's `READY` fills unconditionally, and is present whether or not the bot is in a voice channel, omitted only until `READY` has arrived since `Bot.Start()` and the HTTP server start in separate goroutines; the URLs are built by `pkg/bot/identity.go`, so clients don't hardcode Discord URL shapes), `GET /api/v1/instants/{url}/content` (fetch/cache a clip, keyed by its percent-encoded URL as the `{url}` path segment — Go's pattern-based `ServeMux` hands `r.PathValue("url")` back already decoded — and return it as a base64 data URI, without touching the bot; `url`'s host must be in the union of every registered provider's `AllowedContentHosts()`, checked by `handleInstantContent` before `instant.GetPlayable` ever fetches it, or it's rejected with the same `invalid_url` a malformed URL gets — a disallowed host isn't distinguishable from a malformed one; a non-200/404 from the clip's own host — e.g. an access-denied or server-error status from its CDN, a site-side problem, not a scraping bug — answers `502 bad_http_status` rather than a blanket `500`, via the `fsutil.ErrUpstreamUnavailable` sentinel `fsutil.Cache.Get` wraps that status in), `GET /api/v1/instants?provider=&page=&search=&region=` (dispatches to a `provider.Registry` by `provider` — defaults to `myinstants` for backward compatibility, an unrecognized key answers `404 provider_not_found` — and scrapes that provider's listing page; see "Talking to the provider sites" below), `GET /api/v1/providers` (the registered providers as `{key, name, supportsSearch, supportsRegion}`, sorted by key, so the UI can build a provider picker instead of hardcoding provider keys client-side), `GET /api/v1/openapi.yaml` and `GET /api/docs` (the API spec and its Redoc-rendered page; see "API spec" below — `/api/docs` is deliberately not version-scoped, since one docs page covers every version). The API adopts real HTTP status codes (400/404/409/422/500/502 as appropriate) rather than shipping everything as 200; see each handler in `pkg/server/server.go` for the exact mapping. `Server` depends on a narrow `BotControl` interface (`Status`, `Identity`, `JoinOwner`, `JoinChannel` and `Leave`), not the full `*bot.Bot`, so `pkg/server` doesn't need to import the bot package's whole surface — `*bot.Bot` satisfies it, and the join/leave errors are `bot.Err*` sentinels that `writeVoiceError` maps to statuses with `errors.Is`. Of those, `Status()` reads the connection behind a mutex (`Bot.vcMu`) since it's now read from the HTTP server's own goroutine as well as the gateway's. The server also registers a zeroconf/mDNS advertisement (`_myinstants._tcp`, see `pkg/server/autodiscovery.go`) on the same port so the UI can auto-discover the backend on the LAN instead of hardcoding an address. The advertisement carries two TXT records, `path=/api` (the base path a discovering client should hit — versioning is deliberately not part of it, since which version to use is the client's own concern) and `api=1` (lets a client refuse a bot it cannot talk to); the instance name stays `<hostname>-<port>`, which clients match on, so don't change it. The service is visible on the wire — a Node `bonjour-service` client discovered the running bot at `http://10.0.0.133:9001` and got HTTP 200 from `/instant/list` (pre-`/api/v1` route). It is *not* visible to macOS's own `dns-sd -B`, because `libp2p/zeroconf` answers multicast directly instead of registering with `mDNSResponder`, so the system tool has nothing to list — debug with a client that reads the wire, not with `dns-sd`. The UI browses for the advertisement; with neither a discovered nor a user-picked server, it talks to nothing rather than falling back to any default address (there is no `localhost:9001` fallback anymore).
-- **`pkg/instant`** — the shared state machine. `Player` (`pkg/instant/player.go`) plays one clip at a time and the newest request wins. Each `Play()` resolves its clip, then — under the player's one mutex — stops the current `Playback` and installs a new one in a single pending slot, and blocks on that playback's own `done` until it returns "end" or "stop". A `Playback` carries its own `context` (`Context()`) and finishes exactly once (`sync.Once`), so a late `End()` from a replaced clip can only reach that clip; the old design shared one `playing` flag and a handful of channels across clips, which let a stale `End()` claim the new clip's flag. `Next()` hands the consumer the pending playback (skipping any already replaced) and returns false once `Close()` is called. Order is by arrival, not by fetch completion: `Play` takes a ticket before resolving its clip, and a request whose ticket is older than one already queued returns "stop" without playing. `Stop()` also raises that floor, so it cancels requests that are still downloading. `GetPlayable`/`GetFromCache` (`pkg/fsutil/fsutil.go`) resolve a clip URL to a local cached file, downloading+validating (must sniff as mp3 via `h2non/filetype`) into `~/.instants/<md5(url)>.mp3` on first access — unlike `GET /api/v1/instants/{url}/content`, this path (and so `POST /api/v1/bot/play`) has no provider host allowlist of its own.
-- Both the bot loop and any HTTP handler that calls `player.Play` share the *same* player — there is no queue, so a newer `/api/v1/bot/play` replaces whatever is playing and the replaced request returns `exitReason: "stop"`.
-- **`Bot.vc` doesn't clear itself on an external disconnect.** `!leave` and a normal shutdown both nil it out, but if the bot gets kicked from its channel or Discord drops the voice socket some other way, nothing notices — `Bot.Status()` (and `GET /api/v1/bot/status`) keeps reporting the last-known channel as connected until the process restarts. A voice-state-update listener that nils `vc` on the bot's own disconnect would close this; it hasn't been built yet. Until then a join to the channel the bot was kicked from is a no-op, since it believes it is still there.
-- Errors surfaced from `pkg/instant`/`pkg/fsutil` (`ErrInvalidLink`, `fsutil.ErrNotFound`, `fsutil.ErrUnsuportedAudioFormat`) and from `pkg/provider` (see above) are mapped to specific HTTP status codes/labels in `pkg/server/server.go` — follow that pattern when adding new error cases rather than falling through to the generic 500. `writeErrorMessage` writes the status it is given, and the UI's HTTP client (in the sibling `peace-breaker-bot-desktop` repo) is expected to branch on it; `label` remains the stable machine-readable identifier within a given status. See "Internationalization" below for where the `message` text that goes with each `label` actually lives.
+- Every request goes through `pkg/httpclient` (UA `peace-breaker-bot/1.0`). Cloudflare 403s Go's
+  default UA on myinstants.com, so never use `http.DefaultClient`. curl 403s regardless, so don't
+  debug with it. If a site adds a bot wall, drop it; no CAPTCHA, proxies or headless browsers.
 
 ## Logging
 
-Logging is stdlib `log/slog`, called through the package-level functions (`slog.Debug(...)`), not injected loggers. `pkg/logging` builds the default handler and owns `log.level` (`debug`/`info`/`warn`/`error`, case-insensitive, default `info`). The level lives in a `slog.LevelVar` so `initConfig` can apply it after the handler exists; an invalid value is rejected by `runRootCmd` before anything starts, not by `initConfig`, so `--help`/`--version` still work with a bad `PBB_LOG_LEVEL`.
+- `log/slog` package-level calls only; never derive a logger at package scope.
+- disgo is capped at INFO (`logging.Floor`): its DEBUG output carries the voice token.
+- Never log the token, message content (only the command name), or HTTP headers and bodies.
+  Nothing per audio frame. Keys are camelCase; durations are integer ms.
 
-- **`log.format` is `text` (default) or `json`**, and `log.color` is `auto` (default), `always` or `never`. Both are switchable at log time like the level, since the handler exists before Viper has read anything: `logging.Setup` builds a text and a JSON handler behind one `formatHandler` that reads an atomic format, and the text handler writes through a `colorWriter` that reads an atomic color flag. Invalid values are rejected by `runRootCmd`, same as `log.level`.
-- **Color tints the finished text line; it never changes the text.** `colorWriter` tokenizes each `slog.TextHandler` record (one `Write` per line) and wraps tokens in the basic ANSI codes (30-37, bold, faint, underline), so stripping the escapes gives the exact uncolored line and the terminal theme picks the shades. Level, message and keys get fixed roles; values are tinted by key name (`err`, `*ms`, `*id`, `*path`/`*file`/`*dir`, `version`, urls, booleans). New keys that follow those suffixes pick the tint up for free. Values with control characters are already quoted by `TextHandler`, so a stray `\x1b` from a third-party site can't repaint the terminal.
-- **`auto` colors only on a terminal.** `NO_COLOR` (non-empty) turns it off, `FORCE_COLOR`/`CLICOLOR_FORCE` (non-empty, not `0`) turn it on (all three are standards read straight from the environment, so they don't take the `PBB_` prefix), `TERM=dumb` turns it off, otherwise stdout must be a terminal. An explicit `always`/`never` wins over all of these. JSON is never colored.
-- **The startup banner** (`logging.PrintBanner`, the Fita cassette) prints once from `initConfig`, before the first log line, for the text format only, so JSON output stays parseable line by line. It follows the color setting and is the same characters uncolored, so it also shows in `docker logs`.
+## i18n
 
-- **Don't derive a logger at package scope** (`var log = slog.Default().With(...)`): it runs before `SetDefault` and would keep the wrong handler for the life of the process. Call `slog.X` at the call site.
-- **disgo is capped at INFO** (`logging.Floor` passed through `bot.WithLogger` in `Bot.Start`), whatever `log.level` says. At DEBUG disgo logs REST request/response bodies and voice-gateway payloads, and those carry the voice token. `debug` means this app's own lines.
-- **Never log** the bot token, Discord message content (only the matched command name), or HTTP headers/bodies. The startup config line reports `tokenSet`, not the token.
-- **Nothing per audio frame**: the pipeline emits 50 frames a second, so `pkg/opusaudio` counts frames and logs once when the stream finishes.
-- Field keys are camelCase (`guildId`, `durationMs`, `err`); durations are integer milliseconds.
-- HTTP calls to providers and clip hosts are traced in one place, the logging `RoundTrip` in `pkg/httpclient` (DEBUG); the API's own requests by the middleware in `pkg/server/logging.go` (DEBUG, since the UI polls `/bot/status`).
+- Catalogs: `pkg/i18n/en_us.go`, `pt_br.go`. API errors are English unless `Accept-Language` says
+  otherwise. The bot follows the guild's locale unless `bot.locale` is set. Triggers stay English.
 
-## Internationalization
+## Platform & Docker
 
-`pkg/i18n` is a small, hand-rolled catalog (`map[language.Tag]map[string]string`,
-plus `x/text/language.NewMatcher` for negotiation) covering the API's error
-messages and the bot's command descriptions — not a framework like
-`nicksnyder/go-i18n`, since there are no plural forms and only two locales to
-justify one. `en_us.go` and `pt_br.go` hold the two catalogs; `Text(tag, key)`
-resolves a key, falling back to English and finally to the key itself, so a
-key this catalog doesn't recognize surfaces as an odd string rather than a
-blank response.
+- Only `pkg/privdrop` and `pkg/logging` have build-tagged files; CI vets every release target.
+- The image is `FROM scratch` and starts as root. `dropPrivileges` chowns the cache to `PUID:PGID`
+  (default 65532) and drops before reading config. It's a no-op when not root.
 
-**API errors default to English**, negotiated per request via an optional
-`Accept-Language` header (`languageFor` in `pkg/server/server.go`) — the
-companion UI never sends this header, since it already translates by `label`
-on its own and only reads `message` as a fallback for a label it doesn't
-recognize. `writeErrorMessage` takes a `label` and a `language.Tag`, not a
-literal string, so a message can no longer drift from the catalog the way
-`unknown_error` once shipped two different Portuguese texts under one label.
+## Keeping this file honest
 
-**The bot's response language follows the invoking guild.** `Bot.localeFor`
-(`pkg/bot/bot.go`) resolves it per message: the `bot.locale` config value
-always wins when set (a single-owner bot that wants a fixed language
-regardless of server); otherwise the guild's own `PreferredLocale`, read from
-disgo's guild cache (`client.Caches.Guild(guildID)` — the same cache `!join`
-already depends on, so `bot.WithCacheConfigOpts(cache.FlagGuilds)` in
-`bot.Start()` has to stay enabled); a DM carries no guild at all and falls
-straight through to `pkg/i18n`'s own English default. Command triggers
-(`!ping`, `!join`, `!help`) are exact map keys in the dispatcher and stay
-English — only their descriptions translate. DMs never get a translated (or
-any) reply — see "Architecture" above.
-
-## Talking to the provider sites
-
-- **The User-Agent is load-bearing, for myinstants.com specifically.** It's behind Cloudflare, which answers 403 to Go's default `Go-http-client/2.0` (and to curl's, and to a bare `Mozilla/5.0`). Every request from every provider goes through `pkg/httpclient`, which sets `User-Agent: peace-breaker-bot/1.0`; both `Provider.client()` methods and `fsutil.Cache.client()` fall back to it. Never swap any of them back to `http.DefaultClient` — myinstants.com's listing and clip download both break, silently, as 403s. The transport is not the problem: Go's HTTP/2 is not flagged (curl's is, so don't draw transport conclusions from curl) — confirmed when this UA was renamed from `discord_instants_player/1.0`: curl 403s on *both* strings (a transport-level Cloudflare fingerprint, not a UA check), while Go's own `http.Client` gets 200 on the new string, same as it did on the old one. Whatever the UA string says, it just has to be a real, non-default value — myinstants.com doesn't care which app name it names. The other two sites answer this same UA with no Cloudflare/bot wall at all as of when they were added; if that ever changes, the fix is to stop scraping the site that tightened up, not to add evasion tooling (CAPTCHA solving, proxy rotation, headless rendering).
-- **Every provider infers its own page count**, via the shared `provider.InferPages(page, count, pageSize)` (see "Architecture" above), since none of these sites publish a real pager. Each provider's `pageSize` constant is empirically measured against live responses, not guessed from markup — get it wrong and the "is there another page" signal is just off by however much, self-correcting only once a genuinely empty page is reached.
-- **myinstants** (`pkg/provider/myinstants`) — a search goes to `/search/?page=N&name=TERM`, which ignores the region (and redirects to `/en/search/`). Browsing with no search term goes to `/en/index/<region>/?page=N` — `/search/` with no name answers 404. `region` is a two-letter code; it is lowercased, defaults to `us`, and anything not matching `^[a-z]{2}$` is refused with the `invalid_region` label before any upstream request. An unknown region answers 200 with no instants. The language prefix is fixed at `en`; it does not change the results. `pageSize` is 36. Clip URLs come from the first quoted argument of the play button's `onclick="play('/media/sounds/x.mp3', 'loader-…', '…')"`; the `len(names) != len(links)` mismatch guard is what catches the next markup change — keep it loud.
-- **SoundboardGuy** (`pkg/provider/soundboardguy`) — the name and the clip URL live on two separate elements, joined by id: `a.shareable--trigger[data-name][data-audio]` names the sound and its `data-audio` is the id of an `audio#<id>` whose `source[src]` is the clip URL. Browses `/sounds/` (all sounds, not one category) and `/sounds/page/N/`; searches via WordPress's stock `/?s=TERM` and `/page/N/?s=TERM`. **Every page — including a zero-result search — also renders a "Discover Meme sound buttons" grid** of unrelated recommendations using the exact same trigger/audio markup, distinguished only by an extra `--infinite` class on its container (`div.sbg-big-grid` for real results, `div.sbg-big-grid.--infinite`/`div.sbg-big-grid--infinite` for the fallback). `parseList` scopes to the non-`--infinite` grid specifically; a selector that just grabbed every `a.shareable--trigger` on the page would silently mix those recommendations into every listing (measured: a real search page had 10 genuine results but 37 total triggers once the fallback grid was counted in). Browse `pageSize` is 40, search `pageSize` is 10 — a different WordPress posts-per-page setting for each.
-- **Sound Buttons** (`pkg/provider/soundbuttons`) — each card's name/url ship as a `JSON.parse('...')` argument inside an Alpine.js `article.sc`'s `@click` attribute, double-escaped (`\uXXXX` for quotes, `\/` for slashes — a JS string literal wrapping already-`json_encode`'d JSON). `unescapeJSString` undoes that generically (an unrecognized backslash escape is just the escaped character, the same rule JS itself uses) before `json.Unmarshal`. `pageSize` is 60. Search (`/search?q=&page=N`) is plain, fully server-paginated HTML. Browsing keys off `/trending`, which is plain HTML but **only serves page 1** — `?page=` on it 404s; a deeper browse page instead goes through an undocumented JSON feed endpoint (`/api/feed/trending?sort=trending&page=N`, `{html, nextUrl}`) found by reading the page's own inline script, not published anywhere. If that endpoint's shape ever changes, `fetchFeed` degrades to an empty page rather than erroring, since browsing past page 1 is a bonus on top of the plain-HTML page 1, not something the rest of the app depends on.
-- **Fixtures in each `pkg/provider/*/testdata` (and `pkg/server/testdata` for the HTTP-layer tests) are trimmed captures of live responses**, fetched with the app's User-Agent. When a site's markup changes, re-capture them; don't hand-edit them into a shape the site no longer serves, or the suite passes against a fiction.
-
-## API spec
-
-`pkg/server/v1/openapi.yaml` is a hand-written OpenAPI 3.1 document, not generated — chosen over an annotation- or reflection-based generator (swaggo/swag, swaggest, huma) specifically because it adds zero dependencies and can say things a generator can't produce automatically. It lives under a version-named directory (`v1/`) so a future `v2/openapi.yaml` can sit alongside it. It's embedded into the binary via `//go:embed v1/openapi.yaml` in `pkg/server/spec.go` and served as-is at `GET /api/v1/openapi.yaml`; `pkg/server/docs.html` (also embedded) renders it at `GET /api/docs` via Redoc loaded from a CDN, so there's no npm/build step. `docs.html` is not version-scoped — it carries a small hardcoded list of `{label, specUrl}` entries (currently just `v1`) rendered as tabs that swap Redoc's spec source; adding v2 later is one more list entry. **There is nothing that keeps the spec in sync with the handlers** — when a route's request/response shape, status code, or error labels change, update `openapi.yaml` by hand in the same PR; `pkg/server/spec_test.go` only checks that it's valid YAML and that every route in `server.go` has an entry, not that the shapes match.
-
-## Distribution
-
-`peace-breaker-bot.iss` is an Inno Setup script used to build a Windows installer that bundles just the built binary, with no external runtime dependency, since `pkg/opusaudio` decodes and resamples in pure Go (see "Architecture" above). `.github/workflows/ci.yaml`'s `build` job builds and tests on `ubuntu-latest`, and its `vet` job runs `go vet ./...` on `ubuntu-latest` for every target the release builds (linux and darwin on amd64/arm64, windows on amd64) so a platform-only break is caught in CI; the actual builds happen at release time, where `release.yaml`'s `binaries` job cross-compiles `windows/amd64` (`CGO_ENABLED=0`) as part of every tagged release and `release-windows.yaml` runs on `windows-latest` to invoke Inno Setup's `ISCC.exe` and produce the installer. **`pkg/privdrop` and `pkg/logging` are the two exceptions to an otherwise platform-neutral module** (everything else has no `//go:build` tags and no `_windows.go`/`_linux.go` files, so `ubuntu-latest` type-checking it is equivalent to type-checking the Windows build too). `pkg/logging`'s `terminal_windows.go` (`//go:build windows`, via `golang.org/x/sys/windows`) detects a console and switches on virtual-terminal processing so ANSI colors render in conhost, and `terminal_other.go` (`//go:build !windows`) checks for a character device. Then `pkg/privdrop`: `privdrop_linux.go` (`//go:build linux`) does the real chown-then-setuid/setgid work described under "Docker image" below, and `privdrop_other.go` (`//go:build !linux`) is a no-op stub, since Go's `syscall` package doesn't expose setuid/setgid outside Linux and the feature only matters for the container image anyway. The `build` job only compiles the Linux variants, so the `vet` matrix is what type-checks `privdrop_other.go` and `terminal_windows.go` before release.
-
-## Docker image
-
-The Dockerfile's final stage is `FROM scratch` — just the static binary and a copied `ca-certificates.crt`, no shell, no `USER` directive, so the container starts as root (UID 0). `cmd/root.go`'s `dropPrivileges` runs first thing inside `runRootCmd`, before the bot token or any config is even validated: it resolves the instant cache dir (`fsutil.GetCacheDirOrCreate`), reads `PUID`/`PGID` from the environment (defaulting to `65532:65532`, the UID/GID the image ran as before this existed), and calls `pkg/privdrop.DropTo`, which recursively `chown`s that directory to `PUID:PGID` and then permanently drops the process to it via `setgroups`/`setgid`/`setuid` — never touching the network or the Discord token as root. This means a bind-mounted volume that doesn't already exist (which Docker creates as `root:root` before ever handing control to the container) no longer needs to be pre-created or `chown`ed by hand: the binary fixes it on every startup, the same pattern LinuxServer.io images and the official Plex image use via `s6-overlay`/`gosu`, just implemented with stdlib syscalls instead of a shell entrypoint since there's no shell in a `scratch` image. `DropTo` is a no-op (returns `false`, `nil`) whenever the process isn't running as root, which covers every non-Docker invocation (`make run`, the Windows binary) and a container explicitly started with a non-root `--user`/`securityContext`, so those paths are unaffected.
+- Change CLAUDE.md in the same commit as the behaviour it describes. Write it as the current state,
+  never history.
+- Add a line only if it is non-obvious from the code AND can't be enforced by a test, lint rule or
+  hook. If it can be enforced, write the check instead.
+- When the user corrects the same thing twice, promote the correction to a rule here (or to a check),
+  not only to personal memory.
+- Anything that changes the desktop contract (routes, status codes, labels, mDNS records, instance
+  name) also updates openapi.yaml, and the PR says "Other repo: …".
+- Keep the file under ~100 lines. When it grows past that, move procedures into .claude/skills.

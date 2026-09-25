@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(gofmt:*)",
+      "Bash(make build)",
+      "Bash(make test)",
+      "Bash(make lint)",
+      "Bash(make cover)",
+      "Bash(golangci-lint run:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)"
+    ],
+    "deny": [
+      "Bash(go run:*)",
+      "Bash(make run)",
+      "Bash(./bin/peace-breaker-bot:*)",
+      "Bash(bin/peace-breaker-bot:*)",
+      "Read(./.peace-breaker-bot.yaml)",
+      "Edit(./.peace-breaker-bot.yaml)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git tag:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh release:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/go-check.sh",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

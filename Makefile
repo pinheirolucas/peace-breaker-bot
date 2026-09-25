@@ -1,4 +1,4 @@
-.PHONY = build run
+.PHONY: build run test lint cover clean
 
 PACKAGE_NAME = github.com/pinheirolucas/peace-breaker-bot
 BIN = ./bin/peace-breaker-bot
@@ -19,7 +19,6 @@ cover:
 	go test -coverprofile cp.out ./...
 	go tool cover -html=cp.out
 
-.PHONY = clean
 clean:
 	go clean
 	rm -rf ./bin
