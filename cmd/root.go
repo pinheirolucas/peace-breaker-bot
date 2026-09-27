@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/favorites"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/logging"
@@ -109,6 +110,10 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("bot owner not provided")
 	}
 
+	if _, err := favorites.OwnerKey(owner); err != nil {
+		return fmt.Errorf("invalid bot owner: %w", err)
+	}
+
 	address := viper.GetString("server.address")
 	if strings.TrimSpace(address) == "" {
 		return errors.New("server address not provided")
@@ -144,7 +149,12 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	s := server.New(player, b)
+	data, err := dataDir()
+	if err != nil {
+		return fmt.Errorf("failed to resolve data dir: %w", err)
+	}
+
+	s := server.New(player, b, server.WithFavorites(favorites.NewStore(data), owner))
 
 	go func() {
 		if err := s.Start(address); err != nil {

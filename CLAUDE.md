@@ -42,6 +42,8 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
   is a fallback, so labels are stable API.
 - `GET /bot/status` is polled; `POST /bot/play` answers `409 bot_not_connected` with no voice connection.
 - `provider` defaults to `myinstants`; `region` is accepted and ignored by providers without regions.
+- `/favorites` is `bot.owner`'s list, not the bot's: clients carry it between bots of one owner.
+  `PUT` must name the owner and the `baseRevision`; a stale one is `409 favorites_conflict`.
 
 ## Architecture (non-obvious parts only)
 

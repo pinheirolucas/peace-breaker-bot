@@ -553,6 +553,123 @@ paths:
                       - { key: soundboardguy, name: SoundboardGuy, supportsSearch: true, supportsRegion: false }
                       - { key: soundbuttons, name: Sound Buttons, supportsSearch: true, supportsRegion: false }
 
+  /api/v1/favorites:
+    get:
+      operationId: getFavorites
+      summary: The bot owner's favourites list
+      description: |
+        The list belongs to the configured `bot.owner`, not to the bot: every
+        bot with the same owner holds a copy, and clients carry changes
+        between them. `owner` in the response is the normalized owner name
+        (trimmed, lowercased) that clients key their copy by. An owner with
+        no stored list gets revision 0 and no instants.
+      responses:
+        "200":
+          description: The owner's list at its current revision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavoritesSuccessEnvelope"
+              examples:
+                stored:
+                  summary: A list saved twice
+                  value:
+                    data:
+                      owner: pinheirolucas
+                      revision: 2
+                      updatedAt: "2026-09-27T14:03:11Z"
+                      instants:
+                        - { name: "Ai que delícia", url: "https://www.myinstants.com/media/sounds/ai-que-delicia.mp3", key: a }
+                        - { name: Bruh, url: "https://www.myinstants.com/media/sounds/movie_1.mp3" }
+                neverStored:
+                  summary: No list yet
+                  value: { data: { owner: pinheirolucas, revision: 0, instants: [] } }
+        "500":
+          description: The owner's file in `data.dir` could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                favoritesUnavailable:
+                  value: { label: favorites_unavailable, message: "The bot couldn't read or save its favorites. Check its data directory." }
+    put:
+      operationId: putFavorites
+      summary: Replace the bot owner's favourites list
+      description: |
+        Replaces the whole list, and succeeds only if `baseRevision` is the
+        list's current revision. A client that gets `favorites_conflict`
+        should read the list again, merge its changes in, and retry with the
+        new revision. `owner` must name this bot's owner; it guards against
+        pushing one owner's list into a bot whose config names someone else.
+        Invalid lists are rejected, never repaired.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoritesPutRequest"
+      responses:
+        "200":
+          description: Saved. The list is at `baseRevision + 1`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavoritesSuccessEnvelope"
+              examples:
+                saved:
+                  value:
+                    data:
+                      owner: pinheirolucas
+                      revision: 3
+                      updatedAt: "2026-09-27T14:05:40Z"
+                      instants:
+                        - { name: Bruh, url: "https://www.myinstants.com/media/sounds/movie_1.mp3", key: b }
+        "400":
+          description: The body wasn't JSON or lacks `owner`, `baseRevision` or `instants`, or the list breaks a rule in `FavoriteInstant`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                invalidBody:
+                  summary: Not JSON, or a required field is missing
+                  value: { label: invalid_body, message: "Invalid request" }
+                invalidFavorites:
+                  summary: Too many items, a bad name, URL or key, or a duplicate URL or key
+                  value: { label: invalid_favorites, message: "That favorites list isn't valid" }
+        "409":
+          description: Nothing was written.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                favoritesConflict:
+                  summary: baseRevision is not the current revision
+                  value: { label: favorites_conflict, message: "The favorites changed on the bot since they were last loaded. Reload them and try again." }
+                ownerMismatch:
+                  summary: owner isn't this bot's owner
+                  value: { label: owner_mismatch, message: "That favorites list belongs to someone other than this bot's owner" }
+        "413":
+          description: The body is over 256 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                favoritesTooLarge:
+                  value: { label: favorites_too_large, message: "That favorites list is too large to save" }
+        "500":
+          description: The file could not be read or written. A failed write leaves the previous list intact.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                favoritesUnavailable:
+                  value: { label: favorites_unavailable, message: "The bot couldn't read or save its favorites. Check its data directory." }
+
   /api/v1/openapi.yaml:
     get:
       operationId: getOpenApiSpecV1
@@ -751,3 +868,69 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Provider"
+
+    FavoriteInstant:
+      type: object
+      required: [name, url]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: 1-200 characters after trimming.
+        url:
+          type: string
+          format: uri
+          description: An absolute http or https URL, unique in the list. Not limited to the providers' hosts.
+        key:
+          type: string
+          pattern: "^[a-z0-9]$"
+          description: The letter or digit that plays this clip in the desktop app. Unique in the list; omitted when unset.
+
+    Favorites:
+      type: object
+      required: [owner, revision, instants]
+      properties:
+        owner:
+          type: string
+          description: The configured bot.owner, trimmed and lowercased.
+        revision:
+          type: integer
+          format: int64
+          description: 0 before the first save, then +1 on every successful PUT. Counted per owner per bot.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the list was last saved, in UTC. Omitted at revision 0.
+        instants:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/FavoriteInstant"
+          description: In the owner's order. Always present, even when empty.
+
+    FavoritesPutRequest:
+      type: object
+      required: [owner, baseRevision, instants]
+      properties:
+        owner:
+          type: string
+          description: This bot's owner, compared case-insensitively.
+        baseRevision:
+          type: integer
+          format: int64
+          description: The revision the client's changes start from.
+        instants:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/FavoriteInstant"
+
+    FavoritesSuccessEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/Favorites"

@@ -33,7 +33,7 @@ func TestCorsMiddleware_OptionsPreflight(t *testing.T) {
 	}
 
 	allowedMethods := rec.Header().Get("Access-Control-Allow-Methods")
-	for _, method := range []string{"GET", "POST", "OPTIONS"} {
+	for _, method := range []string{"GET", "POST", "PUT", "OPTIONS"} {
 		if !strings.Contains(allowedMethods, method) {
 			t.Fatalf("expected Access-Control-Allow-Methods %q to contain %q", allowedMethods, method)
 		}
@@ -71,7 +71,7 @@ func TestCorsMiddleware_GetPassesThrough(t *testing.T) {
 	}
 
 	allowedMethods := rec.Header().Get("Access-Control-Allow-Methods")
-	for _, method := range []string{"GET", "POST", "OPTIONS"} {
+	for _, method := range []string{"GET", "POST", "PUT", "OPTIONS"} {
 		if !strings.Contains(allowedMethods, method) {
 			t.Fatalf("expected Access-Control-Allow-Methods %q to contain %q", allowedMethods, method)
 		}

@@ -49,3 +49,20 @@ func TestDataDirOrCreateUsesTheSetting(t *testing.T) {
 		t.Errorf("data dir not created: %v", err)
 	}
 }
+
+func TestRunRootCmdRejectsAnOwnerThatIsNotADiscordUsername(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	viper.Set("bot.token", "token")
+	viper.Set("bot.owner", "Name#1234")
+	t.Cleanup(func() {
+		viper.Set("bot.token", nil)
+		viper.Set("bot.owner", nil)
+	})
+
+	err := runRootCmd(rootCmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "invalid bot owner") {
+		t.Errorf("runRootCmd error = %v, want an invalid bot owner error", err)
+	}
+}
