@@ -31,19 +31,5 @@
       "Bash(gh workflow run:*)",
       "Bash(gh release:*)"
     ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|MultiEdit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/go-check.sh",
-            "timeout": 60
-          }
-        ]
-      }
-    ]
   }
 }

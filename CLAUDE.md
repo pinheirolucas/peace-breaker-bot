@@ -23,16 +23,15 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
   Merge commits, no squash. Commit subject: imperative, sentence case, no prefix; body says why.
 - PR body: `## Summary`, `## Test plan` (commands run), `## Not verified`,
   `Other repo: none | peace-breaker-bot-desktop#N`. Backend PRs land before the desktop PRs using them.
-- Release: the Cut Release workflow (see the `cut-release` skill). Never tag by hand; the tag is the version.
+- Release: the Cut Release workflow, run by the user. Never tag by hand; the tag is the version.
 
 ## Tooling
 
-- Skills in `.claude/skills`: `add-endpoint`, `add-provider`, `add-config-setting`, `add-bot-command`,
-  `run-safely`, and `cut-release` (user-invoked only). Follow the matching one; it lists what to update.
+- Skills in `.claude/skills`: `add-endpoint`, `add-provider`, `add-config-setting`, `add-bot-command`
+  and `run-safely`. Follow the matching one; it lists what to update.
 - Drift tests: `pkg/server/spec_test.go` (routes, operations and labels ↔ openapi.yaml and catalogs),
   `cmd/docs_test.go` (flags ↔ sample config and README), `pkg/bot/docs_test.go` (commands ↔ help, README).
-- `.claude/settings.json` denies running the bot, force-push, tags and release workflows. Its hook runs
-  gofmt and go vet after each Go edit and flags comments the Workflow rule doesn't allow.
+- `.claude/settings.json` denies running the bot, force-push, tags and release workflows.
 
 ## Contract with the desktop app
 
