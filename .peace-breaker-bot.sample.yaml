@@ -73,3 +73,15 @@ server:
   # - CLI Flag: --server-address
   # - Environment: PBB_SERVER_ADDRESS
   address: 0.0.0.0:9001
+
+# Data related settings.
+data:
+  # The directory where the bot keeps data it must not lose, such as each
+  # owner's favourites. Unlike the clip cache (~/.instants), nothing here can
+  # be downloaded again, so back it up and, in Docker, mount it as a volume.
+  # Defaults to $HOME/.peace-breaker-bot when blank.
+  #
+  # Setting mapped to:
+  # - CLI Flag: --data-dir
+  # - Environment: PBB_DATA_DIR
+  dir: ''

@@ -81,8 +81,9 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
 ## Platform & Docker
 
 - Only `pkg/privdrop` and `pkg/logging` have build-tagged files; CI vets every release target.
-- The image is `FROM scratch` and starts as root. `dropPrivileges` chowns the cache to `PUID:PGID`
-  (default 65532) and drops before reading config. It's a no-op when not root.
+- The image is `FROM scratch` and starts as root. `dropPrivileges` chowns the cache and `data.dir`
+  to `PUID:PGID` (default 65532) and drops before reading config. It's a no-op when not root.
+- The clip cache (`~/.instants`) is disposable; `data.dir` holds favourites and is not. Both are volumes.
 
 ## Keeping this file honest
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -76,6 +77,9 @@ func init() {
 
 	rootCmd.PersistentFlags().String("log-color", "", "colored logs: auto, always or never (default auto)")
 	cobra.CheckErr(viper.BindPFlag("log.color", rootCmd.PersistentFlags().Lookup("log-color")))
+
+	rootCmd.PersistentFlags().String("data-dir", "", "directory for data the bot keeps, such as favourites (default $HOME/.peace-breaker-bot)")
+	cobra.CheckErr(viper.BindPFlag("data.dir", rootCmd.PersistentFlags().Lookup("data-dir")))
 }
 
 func runRootCmd(cmd *cobra.Command, args []string) error {
@@ -156,15 +160,20 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// dropPrivileges chowns the instant cache dir to PUID/PGID (both read
-// straight from the environment, not through Viper, since they're Docker
-// plumbing rather than app config) and permanently drops the process to
-// that uid/gid. It's a no-op outside a root-started container — see
+// dropPrivileges chowns the instant cache dir and the data dir to PUID/PGID
+// (both read straight from the environment, not through Viper, since they're
+// Docker plumbing rather than app config) and permanently drops the process
+// to that uid/gid. It's a no-op outside a root-started container — see
 // pkg/privdrop.
 func dropPrivileges() error {
 	dir, err := fsutil.GetCacheDirOrCreate()
 	if err != nil {
 		return fmt.Errorf("failed to prepare cache dir: %w", err)
+	}
+
+	data, err := dataDirOrCreate()
+	if err != nil {
+		return fmt.Errorf("failed to prepare data dir: %w", err)
 	}
 
 	uid, err := envIntOrDefault("PUID", defaultContainerUID)
@@ -177,17 +186,43 @@ func dropPrivileges() error {
 		return err
 	}
 
-	dropped, err := privdrop.DropTo(dir, uid, gid)
+	dropped, err := privdrop.DropTo(uid, gid, dir, data)
 	if err != nil {
 		return err
 	}
 	if dropped {
-		slog.Info("dropped privileges", "uid", uid, "gid", gid, "dir", dir)
+		slog.Info("dropped privileges", "uid", uid, "gid", gid, "dir", dir, "dataDir", data)
 	} else {
-		slog.Debug("privileges not dropped", "euid", os.Geteuid(), "cacheDir", dir)
+		slog.Debug("privileges not dropped", "euid", os.Geteuid(), "cacheDir", dir, "dataDir", data)
 	}
 
 	return nil
+}
+
+func dataDir() (string, error) {
+	if dir := strings.TrimSpace(viper.GetString("data.dir")); dir != "" {
+		return dir, nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(home, ".peace-breaker-bot"), nil
+}
+
+func dataDirOrCreate() (string, error) {
+	dir, err := dataDir()
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+
+	return dir, nil
 }
 
 func envIntOrDefault(key string, def int) (int, error) {
