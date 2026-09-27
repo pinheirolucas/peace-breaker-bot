@@ -145,7 +145,7 @@ func TestGetHelpResolvesRealKeysPerLocale(t *testing.T) {
 	d.Register("!ping", "bot.ping.help", func(ctx *DiscordContext) {})
 
 	ptBR := d.GetHelp(language.BrazilianPortuguese)
-	if !strings.Contains(ptBR, "Teste para verificar se o bot está online") {
+	if !strings.Contains(ptBR, "Verifica se o bot está online") {
 		t.Errorf("GetHelp(pt-BR) missing the Portuguese help text:\n%s", ptBR)
 	}
 

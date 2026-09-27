@@ -70,7 +70,7 @@ paths:
               examples:
                 invalidBody:
                   summary: Body was not valid JSON
-                  value: { label: invalid_body, message: "Invalid request" }
+                  value: { label: invalid_body, message: "The bot couldn't understand the request" }
                 invalidUrl:
                   summary: url is missing/malformed
                   value: { label: invalid_url, message: "That URL isn't valid" }
@@ -91,7 +91,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 botNotConnected:
-                  value: { label: bot_not_connected, message: "The bot isn't in a voice channel yet — make it join one first." }
+                  value: { label: bot_not_connected, message: "The bot isn't in a voice channel yet. Join one and type !join, or use !join #channel." }
         "422":
           description: The downloaded file did not sniff as mp3.
           content:
@@ -109,7 +109,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 unknownError:
-                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment" }
+                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment." }
 
   /api/v1/bot/stop:
     post:
@@ -195,7 +195,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 invalidBody:
-                  value: { label: invalid_body, message: "Invalid request" }
+                  value: { label: invalid_body, message: "The bot couldn't understand the request" }
         "404":
           description: "`channelId` matches no channel in any server the bot is in."
           content:
@@ -204,7 +204,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 channelNotFound:
-                  value: { label: channel_not_found, message: "That voice channel couldn't be found" }
+                  value: { label: channel_not_found, message: "Couldn't find that voice channel. Check the name and try again." }
         "409":
           description: |
             Only when following the owner (no `channelId`): the owner is not in a voice channel the bot can see (`owner_not_in_voice`), or the bot has not seen the owner yet (`owner_unknown`).
@@ -216,7 +216,7 @@ paths:
                 ownerNotInVoice:
                   value: { label: owner_not_in_voice, message: "The bot's owner isn't in a voice channel the bot can see" }
                 ownerUnknown:
-                  value: { label: owner_unknown, message: "The bot hasn't seen its owner yet. Send it any message on Discord, then try again" }
+                  value: { label: owner_unknown, message: "The bot hasn't seen its owner yet. Send it any message on Discord, then try again." }
         "422":
           description: "`channelId` is a real channel but not a voice or stage channel."
           content:
@@ -234,7 +234,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 unknownError:
-                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment" }
+                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment." }
         "502":
           description: "Discord refused the connection or the handshake timed out (missing Connect permission, full channel, …). If the bot was in another channel it has left it."
           content:
@@ -252,7 +252,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 botNotReady:
-                  value: { label: bot_not_ready, message: "The bot is still starting up. Try again in a moment" }
+                  value: { label: bot_not_ready, message: "The bot is still starting up. Try again in a moment." }
 
   /api/v1/bot/leave:
     post:
@@ -290,7 +290,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 botNotReady:
-                  value: { label: bot_not_ready, message: "The bot is still starting up. Try again in a moment" }
+                  value: { label: bot_not_ready, message: "The bot is still starting up. Try again in a moment." }
 
   /api/v1/bot/status:
     get:
@@ -409,7 +409,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 unknownError:
-                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment" }
+                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment." }
         "502":
           description: url's host answered with a status other than 200/404 (e.g. an access-denied response from the CDN).
           content:
@@ -418,7 +418,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 badHttpStatus:
-                  value: { label: bad_http_status, message: "That provider's site answered with an error" }
+                  value: { label: bad_http_status, message: "That site answered with an error" }
 
   /api/v1/instants:
     get:
@@ -503,7 +503,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 providerNotFound:
-                  value: { label: provider_not_found, message: "That provider isn't recognized" }
+                  value: { label: provider_not_found, message: "That site isn't supported" }
         "500":
           description: The scrape found an unexpected markup shape (the site's layout likely changed), or anything else unexpected.
           content:
@@ -512,9 +512,9 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
               examples:
                 nameLinkNotMatched:
-                  value: { label: name_link_not_matched, message: "That provider's results couldn't be read — its page layout may have changed" }
+                  value: { label: name_link_not_matched, message: "Couldn't read that site's results. Its page may have changed." }
                 unknownError:
-                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment" }
+                  value: { label: unknown_error, message: "Something went wrong. Try again in a moment." }
         "502":
           description: The provider's site could not be reached, or answered with a bad status.
           content:
@@ -524,10 +524,10 @@ paths:
               examples:
                 httpRequest:
                   summary: Could not reach the provider's site
-                  value: { label: http_request, message: "Couldn't reach that provider's site" }
+                  value: { label: http_request, message: "Couldn't reach that site" }
                 badHttpStatus:
                   summary: The provider's site answered a non-200/404 status
-                  value: { label: bad_http_status, message: "That provider's site answered with an error" }
+                  value: { label: bad_http_status, message: "That site answered with an error" }
 
   /api/v1/providers:
     get:

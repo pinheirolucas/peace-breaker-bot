@@ -129,7 +129,7 @@ func TestHandleBotJoinTranslatesErrorsPerAcceptLanguage(t *testing.T) {
 	req.Header.Set("Accept-Language", "pt-BR")
 	s.handleBotJoin(rec, req)
 
-	if got := decodeBody(t, rec)["message"]; got != "Esse canal de voz não foi encontrado" {
+	if got := decodeBody(t, rec)["message"]; got != "Não encontrei esse canal de voz. Confira o nome e tente de novo." {
 		t.Errorf("message = %v, want the pt-BR text", got)
 	}
 }
