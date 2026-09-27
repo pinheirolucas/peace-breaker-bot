@@ -14,6 +14,7 @@ var enUS = map[string]string{
 	"bot_not_connected":       "The bot isn't in a voice channel yet. Join one and type !join, or use !join #channel.",
 	"channel_not_found":       "Couldn't find that voice channel. Check the name and try again.",
 	"owner_not_in_voice":      "The bot's owner isn't in a voice channel the bot can see",
+	"author_not_in_voice":     "You're not in a voice channel. Join one, or name it: !join #channel",
 	"owner_unknown":           "The bot hasn't seen its owner yet. Send it any message on Discord, then try again.",
 	"not_voice_channel":       "That channel isn't a voice channel",
 	"voice_join_failed":       "The bot couldn't connect to that voice channel",

@@ -15,6 +15,8 @@ import (
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/i18n"
 )
 
+var errAuthorNotInVoice = errors.New("message author is not in a voice channel")
+
 func (b *Bot) join(ctx *command.DiscordContext) {
 	e := ctx.Event
 	client := e.Client()
@@ -34,7 +36,7 @@ func chatTarget(client *bot.Client, guildID, authorID snowflake.ID, arg string) 
 	if arg == "" {
 		state, ok := client.Caches.VoiceState(guildID, authorID)
 		if !ok || state.ChannelID == nil {
-			return 0, ErrOwnerNotInVoice
+			return 0, errAuthorNotInVoice
 		}
 
 		return *state.ChannelID, nil
@@ -70,6 +72,8 @@ func joinErrorKey(err error) string {
 		return "not_voice_channel"
 	case errors.Is(err, ErrOwnerUnknown):
 		return "owner_unknown"
+	case errors.Is(err, errAuthorNotInVoice):
+		return "author_not_in_voice"
 	case errors.Is(err, ErrOwnerNotInVoice):
 		return "owner_not_in_voice"
 	case errors.Is(err, ErrJoinFailed):

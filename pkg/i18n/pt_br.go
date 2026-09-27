@@ -14,6 +14,7 @@ var ptBR = map[string]string{
 	"bot_not_connected":       "O bot ainda não está em nenhum canal de voz. Entre em um e mande !join, ou use !join #canal.",
 	"channel_not_found":       "Não encontrei esse canal de voz. Confira o nome e tente de novo.",
 	"owner_not_in_voice":      "O dono do bot não está em um canal de voz que o bot consiga ver",
+	"author_not_in_voice":     "Você não está em nenhum canal de voz. Entre em um ou indique qual: !join #canal",
 	"owner_unknown":           "O bot ainda não conhece o dono. Mande qualquer mensagem para ele no Discord e tente de novo.",
 	"not_voice_channel":       "Esse canal não é um canal de voz",
 	"voice_join_failed":       "O bot não conseguiu se conectar a esse canal de voz",
