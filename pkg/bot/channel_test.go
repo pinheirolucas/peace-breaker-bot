@@ -144,8 +144,8 @@ func TestChatTarget(t *testing.T) {
 	}{
 		{"no argument follows the sender", 5, "", 11, nil},
 		{"blank argument follows the sender", 5, "   ", 11, nil},
-		{"sender in no channel", 6, "", 0, ErrOwnerNotInVoice},
-		{"sender with no voice state", 7, "", 0, ErrOwnerNotInVoice},
+		{"sender in no channel", 6, "", 0, errAuthorNotInVoice},
+		{"sender with no voice state", 7, "", 0, errAuthorNotInVoice},
 		{"channel by name", 7, "#instants", 10, nil},
 		{"channel by name, other case", 7, "#INSTANTS", 10, nil},
 		{"channel by name without hash", 7, "instants", 10, nil},
@@ -171,7 +171,7 @@ func TestChatTarget(t *testing.T) {
 
 func TestEveryJoinErrorHasATranslatedMessage(t *testing.T) {
 	errs := []error{
-		ErrNotReady, ErrChannelNotFound, ErrNotVoiceChannel, ErrOwnerUnknown, ErrOwnerNotInVoice,
+		ErrNotReady, ErrChannelNotFound, ErrNotVoiceChannel, ErrOwnerUnknown, ErrOwnerNotInVoice, errAuthorNotInVoice,
 		fmt.Errorf("%w: timed out", ErrJoinFailed), fmt.Errorf("other"),
 	}
 

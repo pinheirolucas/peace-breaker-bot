@@ -32,17 +32,17 @@ func TestMatchAcceptLanguageHonoursWeights(t *testing.T) {
 }
 
 func TestTextResolvesPerLocale(t *testing.T) {
-	if got := Text(language.BrazilianPortuguese, "invalid_body"); got != "Requisição inválida" {
+	if got := Text(language.BrazilianPortuguese, "invalid_body"); got != "O bot não entendeu o pedido" {
 		t.Errorf("Text(pt-BR, invalid_body) = %q", got)
 	}
-	if got := Text(language.AmericanEnglish, "invalid_body"); got != "Invalid request" {
+	if got := Text(language.AmericanEnglish, "invalid_body"); got != "The bot couldn't understand the request" {
 		t.Errorf("Text(en-US, invalid_body) = %q", got)
 	}
 }
 
 func TestTextFallsBackToEnglishThenToTheKeyItself(t *testing.T) {
 	// A locale this catalog doesn't have an entry for at all falls to English.
-	if got := Text(language.Japanese, "invalid_body"); got != "Invalid request" {
+	if got := Text(language.Japanese, "invalid_body"); got != "The bot couldn't understand the request" {
 		t.Errorf("Text(ja, invalid_body) = %q, want the English fallback", got)
 	}
 
