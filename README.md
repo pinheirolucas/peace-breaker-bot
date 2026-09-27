@@ -1,18 +1,18 @@
 # Peace Breaker Bot
 
-A Discord bot that joins a voice channel and plays short audio clips ("instants", like the ones on [myinstants.com](https://www.myinstants.com)) on command, paired with a local HTTP API for controlling playback and searching myinstants.com. This is the backend service; the desktop UI that drives it lives in the sibling repo [`peace-breaker-bot-desktop`](https://github.com/pinheirolucas/peace-breaker-bot-desktop).
+A Discord bot that joins a voice channel and plays short audio clips ("instants", like the ones on [myinstants.com](https://www.myinstants.com)) on command, paired with a local HTTP API for controlling the bot and browsing clips from myinstants.com, SoundboardGuy and Sound Buttons. This is the backend service; the desktop UI that drives it lives in the sibling repo [`peace-breaker-bot-desktop`](https://github.com/pinheirolucas/peace-breaker-bot-desktop).
 
 ## Features
 
 - Discord bot that streams mp3 clips into a voice channel.
-- HTTP API to trigger playback, stop playback, fetch a clip for local preview, and search myinstants.com.
+- HTTP API to play and stop clips, join and leave voice channels, report the bot's status, fetch a clip for local preview, and browse or search each provider. The full reference is served at `/api/docs`.
 - Downloaded clips are cached locally (`~/.instants`) so repeat plays don't re-fetch.
 - Advertises itself on the local network via mDNS/zeroconf (`_myinstants._tcp`) so clients can auto-discover it.
 - Only responds to a single configured Discord username, to avoid the bot being hijacked in shared servers.
 
 ## Requirements
 
-- Go 1.14+
+- Go 1.27+ (the exact version is pinned in `.tool-versions`)
 - A Discord bot application/token — see the [Discord developer docs](https://discord.com/developers/docs/intro) to create one
 
 ## Installation
@@ -80,6 +80,8 @@ Once running, invite the bot to your server and, from a text channel, use:
 | Command | Description |
 | --- | --- |
 | `!join` | Bot joins the voice channel you're currently in |
+| `!join #name` | Bot joins the named voice channel in this server |
+| `!leave` | Bot stops playing and leaves the voice channel |
 | `!ping` | Health check |
 | `!help` | Lists available commands |
 
@@ -88,7 +90,8 @@ Once running, invite the bot to your server and, from a text channel, use:
 ```bash
 make build   # compile the binary
 make run     # build and run
-make test    # go test ./...
+make test    # go test -race -timeout 90s ./...
+make lint    # golangci-lint (version pinned in .tool-versions)
 make cover   # run tests with coverage and open an HTML report
 make clean   # remove build artifacts
 ```

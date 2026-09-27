@@ -1,4 +1,10 @@
 // Package myinstants scrapes myinstants.com's listing pages.
+//
+// Search goes to /search/?page=N&name=TERM and ignores the region. Browsing goes to
+// /en/index/<region>/?page=N, since /search/ without a name answers 404. Region is a lowercased
+// two-letter code, defaulting to "us"; an unknown one answers 200 with no instants. Clip URLs are the
+// first argument of each play button's onclick="play('/media/sounds/x.mp3', ...)", and a names/links
+// count mismatch is how a markup change surfaces.
 package myinstants
 
 import (

@@ -1,4 +1,10 @@
 // Package soundboardguy scrapes soundboardguy.com's listing pages.
+//
+// Each a.shareable--trigger carries the sound name and, in data-audio, the id of the audio element
+// whose source is the clip URL. Browsing uses /sounds/page/N/ and search uses WordPress's /?s=TERM,
+// with different page sizes. Every page, even a zero-result search, also renders an unrelated
+// recommendations grid with the same markup under an extra --infinite class, so parsing must scope
+// to the grid without it.
 package soundboardguy
 
 import (

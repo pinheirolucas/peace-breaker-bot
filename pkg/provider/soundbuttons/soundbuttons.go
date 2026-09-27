@@ -1,4 +1,9 @@
 // Package soundbuttons scrapes soundbuttons.io's listing pages.
+//
+// Each card's name and URL ship as a double-escaped JSON.parse('...') argument in an Alpine.js @click
+// attribute. Search (/search?q=&page=N) is plain paginated HTML. Browsing serves only page 1 at
+// /trending; deeper pages come from the undocumented /api/feed/trending?sort=trending&page=N feed,
+// which degrades to an empty page if its shape changes.
 package soundbuttons
 
 import (

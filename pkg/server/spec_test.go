@@ -1,49 +1,128 @@
 package server
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/i18n"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
 )
 
-// TestOpenAPISpecIsValidYAML guards the one thing that can't be caught by
-// eye: a hand-maintained spec with broken YAML syntax. It does not validate
-// against the OpenAPI schema itself, only that the document parses and
-// documents the routes this package actually serves.
-func TestOpenAPISpecIsValidYAML(t *testing.T) {
-	var doc struct {
-		OpenAPI string                 `yaml:"openapi"`
-		Paths   map[string]interface{} `yaml:"paths"`
-	}
+type openAPIDoc struct {
+	OpenAPI string                            `yaml:"openapi"`
+	Paths   map[string]map[string]interface{} `yaml:"paths"`
+}
 
+func loadOpenAPIDoc(t *testing.T) openAPIDoc {
+	t.Helper()
+
+	var doc openAPIDoc
 	if err := yaml.Unmarshal(openAPISpec, &doc); err != nil {
 		t.Fatalf("openapi.yaml does not parse: %v", err)
 	}
 
-	if doc.OpenAPI == "" {
+	return doc
+}
+
+func TestOpenAPISpecIsValidYAML(t *testing.T) {
+	if doc := loadOpenAPIDoc(t); doc.OpenAPI == "" {
 		t.Error("openapi.yaml is missing the top-level openapi version field")
 	}
+}
 
-	wantPaths := []string{
-		"/api/v1/bot/play",
-		"/api/v1/bot/stop",
-		"/api/v1/bot/join",
-		"/api/v1/bot/leave",
-		"/api/v1/bot/status",
-		"/api/v1/instants/{url}/content",
-		"/api/v1/instants",
-		"/api/v1/providers",
-		"/api/v1/openapi.yaml",
-		"/api/docs",
+func TestOpenAPISpecDocumentsEveryRoute(t *testing.T) {
+	doc := loadOpenAPIDoc(t)
+
+	for _, rt := range New(instant.NewPlayer(), connectedBot()).routes() {
+		method, path, ok := strings.Cut(rt.pattern, " ")
+		if !ok {
+			t.Errorf("route %q has no method", rt.pattern)
+			continue
+		}
+
+		if _, ok := doc.Paths[path][strings.ToLower(method)]; !ok {
+			t.Errorf("openapi.yaml has no %s %s; document it in pkg/server/v1/openapi.yaml", method, path)
+		}
 	}
-	for _, p := range wantPaths {
-		if _, ok := doc.Paths[p]; !ok {
-			t.Errorf("openapi.yaml is missing documentation for %s", p)
+}
+
+func TestOpenAPISpecHasNoUnservedRoutes(t *testing.T) {
+	served := map[string]bool{}
+	for _, rt := range New(instant.NewPlayer(), connectedBot()).routes() {
+		served[rt.pattern] = true
+	}
+
+	for path, ops := range loadOpenAPIDoc(t).Paths {
+		for method := range ops {
+			if method == "parameters" {
+				continue
+			}
+			if pattern := strings.ToUpper(method) + " " + path; !served[pattern] {
+				t.Errorf("openapi.yaml documents %s, which server.go doesn't serve", pattern)
+			}
+		}
+	}
+}
+
+func errorLabels(t *testing.T) []string {
+	t.Helper()
+
+	file, err := parser.ParseFile(token.NewFileSet(), "server.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse server.go: %v", err)
+	}
+
+	seen := map[string]bool{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if ident, ok := call.Fun.(*ast.Ident); !ok || ident.Name != "writeErrorMessage" {
+			return true
+		}
+		if lit, ok := call.Args[len(call.Args)-1].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			seen[strings.Trim(lit.Value, `"`)] = true
+		}
+		return true
+	})
+
+	labels := make([]string, 0, len(seen))
+	for label := range seen {
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+
+	if len(labels) == 0 {
+		t.Fatal("found no writeErrorMessage labels in server.go")
+	}
+
+	return labels
+}
+
+func TestEveryErrorLabelHasCatalogText(t *testing.T) {
+	for _, label := range errorLabels(t) {
+		for _, lang := range i18n.Supported {
+			if i18n.Text(lang, label) == label {
+				t.Errorf("label %q has no %s text in pkg/i18n", label, lang)
+			}
+		}
+	}
+}
+
+func TestEveryErrorLabelIsDocumented(t *testing.T) {
+	spec := string(openAPISpec)
+	for _, label := range errorLabels(t) {
+		if !strings.Contains(spec, "label: "+label) {
+			t.Errorf("label %q has no example in openapi.yaml", label)
 		}
 	}
 }

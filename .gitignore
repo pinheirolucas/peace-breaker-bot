@@ -20,3 +20,7 @@
 bin
 .peace-breaker-bot*
 !.peace-breaker-bot.sample.yaml
+
+# Personal agent settings
+CLAUDE.local.md
+.claude/settings.local.json
