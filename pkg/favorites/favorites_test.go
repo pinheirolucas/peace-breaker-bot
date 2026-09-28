@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -245,6 +246,9 @@ func TestALeftoverTempFileIsIgnored(t *testing.T) {
 }
 
 func TestAFailedWriteKeepsTheOldList(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ignores directory permissions")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permissions")
 	}
