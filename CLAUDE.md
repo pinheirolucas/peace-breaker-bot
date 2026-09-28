@@ -42,6 +42,8 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
   is a fallback, so labels are stable API.
 - `GET /bot/status` is polled; `POST /bot/play` answers `409 bot_not_connected` with no voice connection.
 - `provider` defaults to `myinstants`; `region` is accepted and ignored by providers without regions.
+- `/favorites` is `bot.owner`'s list, not the bot's: clients carry it between bots of one owner.
+  `PUT` must name the owner and the `baseRevision`; a stale one is `409 favorites_conflict`.
 
 ## Architecture (non-obvious parts only)
 
@@ -81,8 +83,9 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
 ## Platform & Docker
 
 - Only `pkg/privdrop` and `pkg/logging` have build-tagged files; CI vets every release target.
-- The image is `FROM scratch` and starts as root. `dropPrivileges` chowns the cache to `PUID:PGID`
-  (default 65532) and drops before reading config. It's a no-op when not root.
+- The image is `FROM scratch` and starts as root. `dropPrivileges` chowns the cache and `data.dir`
+  to `PUID:PGID` (default 65532) and drops before reading config. It's a no-op when not root.
+- The clip cache (`~/.instants`) is disposable; `data.dir` holds favourites and is not. Both are volumes.
 
 ## Keeping this file honest
 

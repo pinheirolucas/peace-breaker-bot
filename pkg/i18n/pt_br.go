@@ -19,6 +19,11 @@ var ptBR = map[string]string{
 	"not_voice_channel":       "Esse canal não é um canal de voz",
 	"voice_join_failed":       "O bot não conseguiu se conectar a esse canal de voz",
 	"bot_not_ready":           "O bot ainda está iniciando. Tente de novo em instantes.",
+	"invalid_favorites":       "O bot recusou a lista de favoritos: o nome, o link ou a tecla de um item não é válido",
+	"favorites_conflict":      "Os favoritos mudaram no bot enquanto isso. Tente de novo.",
+	"owner_mismatch":          "Esses favoritos são de outra pessoa, não do dono deste bot",
+	"favorites_too_large":     "A lista de favoritos é grande demais para o bot salvar",
+	"favorites_unavailable":   "O bot não conseguiu ler nem salvar os favoritos. Confira a pasta de dados dele.",
 
 	"bot.ping.help":   "Verifica se o bot está online",
 	"bot.join.help":   "Chama o bot para o seu canal de voz ou para o que você indicar (!join #canal)",

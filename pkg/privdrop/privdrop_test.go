@@ -10,7 +10,7 @@ func TestDropToNotRootIsNoOp(t *testing.T) {
 		t.Skip("test must not run as root")
 	}
 
-	dropped, err := DropTo(t.TempDir(), 65532, 65532)
+	dropped, err := DropTo(65532, 65532, t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatalf("DropTo returned error: %v", err)
 	}

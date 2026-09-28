@@ -19,6 +19,11 @@ var enUS = map[string]string{
 	"not_voice_channel":       "That channel isn't a voice channel",
 	"voice_join_failed":       "The bot couldn't connect to that voice channel",
 	"bot_not_ready":           "The bot is still starting up. Try again in a moment.",
+	"invalid_favorites":       "The bot refused the favorites list: an item's name, link or key isn't valid",
+	"favorites_conflict":      "The favorites changed on the bot in the meantime. Try again.",
+	"owner_mismatch":          "Those favorites belong to someone other than this bot's owner",
+	"favorites_too_large":     "The favorites list is too large for the bot to save",
+	"favorites_unavailable":   "The bot couldn't read or save its favorites. Check its data folder.",
 
 	"bot.ping.help":   "Checks whether the bot is online",
 	"bot.join.help":   "Brings the bot into your voice channel, or the one you name (!join #channel)",

@@ -10,18 +10,20 @@ import (
 	"syscall"
 )
 
-// DropTo recursively chowns dir to uid:gid, then permanently drops the
+// DropTo recursively chowns each dir to uid:gid, then permanently drops the
 // calling process's privileges to that uid:gid. It's a no-op, reporting
 // false, when the process isn't running as root: there's nothing to drop
 // and no permission to chown anything anyway, which is the normal case for
 // every non-container invocation of this binary.
-func DropTo(dir string, uid, gid int) (bool, error) {
+func DropTo(uid, gid int, dirs ...string) (bool, error) {
 	if os.Geteuid() != 0 {
 		return false, nil
 	}
 
-	if err := chownRecursive(dir, uid, gid); err != nil {
-		return false, fmt.Errorf("failed to chown %s: %w", dir, err)
+	for _, dir := range dirs {
+		if err := chownRecursive(dir, uid, gid); err != nil {
+			return false, fmt.Errorf("failed to chown %s: %w", dir, err)
+		}
 	}
 
 	// Since Go 1.16, Setgroups/Setgid/Setuid on linux apply across every OS

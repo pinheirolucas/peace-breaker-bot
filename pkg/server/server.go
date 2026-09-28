@@ -17,6 +17,7 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/bot"
+	"github.com/pinheirolucas/peace-breaker-bot/pkg/favorites"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/fsutil"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/i18n"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
@@ -29,6 +30,8 @@ import (
 const autodiscoveryServiceName = "_myinstants._tcp"
 
 const defaultProviderKey = "myinstants"
+
+const maxFavoritesBody = 256 << 10
 
 var defaultRegistry = newRegistry(
 	myinstants.New(),
@@ -59,10 +62,29 @@ type Server struct {
 	bot    BotControl
 
 	registry provider.Registry
+
+	favorites *favorites.Store
+	owner     string
 }
 
-func New(player *instant.Player, bot BotControl) *Server {
-	return &Server{player: player, bot: bot}
+// Option configures a Server.
+type Option func(*Server)
+
+// WithFavorites serves the owner's favourites list from store.
+func WithFavorites(store *favorites.Store, owner string) Option {
+	return func(s *Server) {
+		s.favorites = store
+		s.owner = owner
+	}
+}
+
+func New(player *instant.Player, bot BotControl, opts ...Option) *Server {
+	s := &Server{player: player, bot: bot}
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	return s
 }
 
 func (s *Server) providers() provider.Registry {
@@ -100,6 +122,8 @@ func (s *Server) routes() []route {
 		{"GET /api/v1/instants", s.handleListInstants},
 		{"GET /api/v1/instants/{url}/content", s.handleInstantContent},
 		{"GET /api/v1/providers", s.handleListProviders},
+		{"GET /api/v1/favorites", s.handleGetFavorites},
+		{"PUT /api/v1/favorites", s.handlePutFavorites},
 		{"GET /api/v1/openapi.yaml", s.handleOpenAPISpec},
 		{"GET /api/docs", s.handleDocs},
 	}
@@ -486,4 +510,82 @@ func (s *Server) handleListInstants(w http.ResponseWriter, r *http.Request) {
 	)
 
 	writeSuccessResponse(w, toInstantListResponse(list))
+}
+
+func (s *Server) handleGetFavorites(w http.ResponseWriter, r *http.Request) {
+	lang := languageFor(r)
+
+	if s.favorites == nil {
+		writeErrorMessage(w, http.StatusInternalServerError, lang, "favorites_unavailable")
+		return
+	}
+
+	list, err := s.favorites.Get(s.owner)
+	if err != nil {
+		slog.Error("favorites read failed", "err", err)
+		writeErrorMessage(w, http.StatusInternalServerError, lang, "favorites_unavailable")
+		return
+	}
+
+	writeSuccessResponse(w, list)
+}
+
+type favoritesPutRequest struct {
+	Owner        string               `json:"owner"`
+	BaseRevision *int64               `json:"baseRevision"`
+	Instants     *[]favorites.Instant `json:"instants"`
+}
+
+func (s *Server) handlePutFavorites(w http.ResponseWriter, r *http.Request) {
+	lang := languageFor(r)
+
+	if s.favorites == nil {
+		writeErrorMessage(w, http.StatusInternalServerError, lang, "favorites_unavailable")
+		return
+	}
+
+	in := new(favoritesPutRequest)
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxFavoritesBody)).Decode(in); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeErrorMessage(w, http.StatusRequestEntityTooLarge, lang, "favorites_too_large")
+			return
+		}
+
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_body")
+		return
+	}
+
+	if strings.TrimSpace(in.Owner) == "" || in.BaseRevision == nil || in.Instants == nil {
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_body")
+		return
+	}
+
+	want, _ := favorites.OwnerKey(s.owner)
+	if got, err := favorites.OwnerKey(in.Owner); err != nil || got != want {
+		slog.Debug("favorites refused, owner mismatch")
+		writeErrorMessage(w, http.StatusConflict, lang, "owner_mismatch")
+		return
+	}
+
+	list, err := s.favorites.Put(s.owner, *in.BaseRevision, *in.Instants)
+	switch {
+	case err == nil:
+	case errors.Is(err, favorites.ErrConflict):
+		slog.Debug("favorites refused, stale revision", "baseRevision", *in.BaseRevision)
+		writeErrorMessage(w, http.StatusConflict, lang, "favorites_conflict")
+		return
+	case errors.Is(err, favorites.ErrInvalid):
+		slog.Debug("favorites refused, invalid list", "err", err)
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_favorites")
+		return
+	default:
+		slog.Error("favorites write failed", "err", err)
+		writeErrorMessage(w, http.StatusInternalServerError, lang, "favorites_unavailable")
+		return
+	}
+
+	slog.Info("favorites saved", "revision", list.Revision, "count", len(list.Instants))
+
+	writeSuccessResponse(w, list)
 }
