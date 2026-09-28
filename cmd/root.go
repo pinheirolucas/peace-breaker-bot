@@ -79,7 +79,7 @@ func init() {
 	rootCmd.PersistentFlags().String("log-color", "", "colored logs: auto, always or never (default auto)")
 	cobra.CheckErr(viper.BindPFlag("log.color", rootCmd.PersistentFlags().Lookup("log-color")))
 
-	rootCmd.PersistentFlags().String("data-dir", "", "directory for data the bot keeps, such as favourites (default $HOME/.peace-breaker-bot)")
+	rootCmd.PersistentFlags().String("data-dir", "", "directory for data the bot keeps, such as favorites (default $HOME/.peace-breaker-bot)")
 	cobra.CheckErr(viper.BindPFlag("data.dir", rootCmd.PersistentFlags().Lookup("data-dir")))
 }
 

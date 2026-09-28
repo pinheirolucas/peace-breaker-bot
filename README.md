@@ -42,7 +42,7 @@ docker run -d --name instants \
   ghcr.io/pinheirolucas/peace-breaker-bot:latest
 ```
 
-Images are published to [GitHub Container Registry](https://github.com/pinheirolucas/peace-breaker-bot/pkgs/container/peace-breaker-bot) on every tagged release, for `linux/amd64` and `linux/arm64`, tagged by exact version (`:1.4.0`), minor track (`:1.4`), and `:latest`. The first `-v` mount persists the downloaded-clip cache (`~/.instants` inside the container) across restarts. The second persists the data directory (`~/.peace-breaker-bot`), which holds each owner's favourites and, unlike the cache, can't be rebuilt.
+Images are published to [GitHub Container Registry](https://github.com/pinheirolucas/peace-breaker-bot/pkgs/container/peace-breaker-bot) on every tagged release, for `linux/amd64` and `linux/arm64`, tagged by exact version (`:1.4.0`), minor track (`:1.4`), and `:latest`. The first `-v` mount persists the downloaded-clip cache (`~/.instants` inside the container) across restarts. The second persists the data directory (`~/.peace-breaker-bot`), which holds each owner's favorites and, unlike the cache, can't be rebuilt.
 
 ## Configuration
 
@@ -57,7 +57,7 @@ Settings can be provided via config file, environment variable, or CLI flag (in 
 | Log level | `log.level` | `--log-level` | `PBB_LOG_LEVEL` | Optional. `debug`, `info` (default), `warn` or `error`. An unknown value stops the app at startup |
 | Log format | `log.format` | `--log-format` | `PBB_LOG_FORMAT` | Optional. `text` (default, key=value lines) or `json` (one object per line, no banner). An unknown value stops the app at startup |
 | Log color | `log.color` | `--log-color` | `PBB_LOG_COLOR` | Optional. `auto` (default), `always` or `never`. `auto` colors only on a terminal and follows `NO_COLOR`, `FORCE_COLOR` and `CLICOLOR_FORCE`. An unknown value stops the app at startup |
-| Data directory | `data.dir` | `--data-dir` | `PBB_DATA_DIR` | Optional. Where the bot keeps data it can't download again, such as each owner's favourites. Defaults to `$HOME/.peace-breaker-bot` |
+| Data directory | `data.dir` | `--data-dir` | `PBB_DATA_DIR` | Optional. Where the bot keeps data it can't download again, such as each owner's favorites. Defaults to `$HOME/.peace-breaker-bot` |
 
 Every environment variable carries a `PBB_` prefix. The exceptions are `PUID` and `PGID` (Docker only) and the standard `NO_COLOR`, `FORCE_COLOR` and `CLICOLOR_FORCE`, which are not prefixed.
 

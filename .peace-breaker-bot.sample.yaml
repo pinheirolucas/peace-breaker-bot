@@ -77,7 +77,7 @@ server:
 # Data related settings.
 data:
   # The directory where the bot keeps data it must not lose, such as each
-  # owner's favourites. Unlike the clip cache (~/.instants), nothing here can
+  # owner's favorites. Unlike the clip cache (~/.instants), nothing here can
   # be downloaded again, so back it up and, in Docker, mount it as a volume.
   # Defaults to $HOME/.peace-breaker-bot when blank.
   #
