@@ -162,14 +162,16 @@ func TestHandleInstantContentAllowsAHostAnyRegisteredProviderAllows(t *testing.T
 	}}
 
 	const link = "https://b.example.com/a.mp3"
+	seedCache(t, link)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/instants/"+link+"/content", nil)
 	req.SetPathValue("url", link)
 
 	rec := httptest.NewRecorder()
 	s.handleInstantContent(rec, req)
 
-	if got := decodeBody(t, rec)["label"]; got == "invalid_url" {
-		t.Errorf("a host allowed by a different registered provider was rejected")
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d: a host allowed by a different registered provider was rejected", rec.Code, http.StatusOK)
 	}
 }
 

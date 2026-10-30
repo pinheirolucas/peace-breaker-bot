@@ -154,6 +154,8 @@ func runRootCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve data dir: %w", err)
 	}
 
+	fsutil.Default.AllowedHosts = server.DefaultContentHosts()
+
 	s := server.New(player, b, server.WithFavorites(favorites.NewStore(data), owner))
 
 	go func() {

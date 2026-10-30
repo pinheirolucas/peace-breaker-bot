@@ -59,7 +59,8 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
   statuses; `InferPages` guesses the page count. Only `myinstants` uses `Region`. Site quirks live in
   each provider's package doc.
 - `/instants/{url}/content` and `/bot/play` both enforce the providers' `AllowedContentHosts`; any other
-  host is `400 invalid_url`, so the bot never fetches an arbitrary URL.
+  host is `400 invalid_url`. `fsutil.Cache` enforces `AllowedHosts` again before any download (none
+  set means none allowed; `cmd/root.go` sets them), so the bot never fetches an arbitrary URL.
 - Known gaps: `Bot.vc` isn't cleared on an external disconnect; following the owner answers
   `owner_unknown` after a restart until the owner speaks.
 

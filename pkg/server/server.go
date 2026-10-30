@@ -227,7 +227,7 @@ func (s *Server) handleBotPlay(w http.ResponseWriter, r *http.Request) {
 	exitReason, err := s.player.Play(in.URL)
 	switch err {
 	case nil:
-	case instant.ErrInvalidLink:
+	case instant.ErrInvalidLink, fsutil.ErrHostNotAllowed:
 		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
 		return
 	case fsutil.ErrNotFound:
@@ -359,6 +359,17 @@ func writeVoiceError(w http.ResponseWriter, lang language.Tag, err error) {
 	}
 }
 
+// DefaultContentHosts lists the hosts the built-in providers serve clips from.
+func DefaultContentHosts() []string {
+	var hosts []string
+	for _, p := range defaultRegistry {
+		hosts = append(hosts, p.AllowedContentHosts()...)
+	}
+	sort.Strings(hosts)
+
+	return hosts
+}
+
 func (s *Server) allowedContentHosts() map[string]struct{} {
 	hosts := make(map[string]struct{})
 	for _, p := range s.providers() {
@@ -400,6 +411,9 @@ func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 	info, err := instant.GetPlayable(rawURL)
 	switch {
 	case err == nil:
+	case errors.Is(err, fsutil.ErrHostNotAllowed):
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
+		return
 	case errors.Is(err, fsutil.ErrUnsuportedAudioFormat):
 		writeErrorMessage(w, http.StatusUnprocessableEntity, lang, "unsuported_audio_format")
 		return

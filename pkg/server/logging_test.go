@@ -46,7 +46,7 @@ func TestHandleInstantContentLogsAnUpstreamFailureAsAWarning(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	previous := fsutil.Default
-	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir(), AllowedHosts: []string{"127.0.0.1"}}
 	t.Cleanup(func() { fsutil.Default = previous })
 
 	link := upstream.URL + "/a.mp3"
