@@ -212,6 +212,12 @@ func (s *Server) handleBotPlay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if host, ok := s.checkContentURL(in.URL); !ok {
+		slog.Debug("play url rejected", "reason", "host-not-allowed", "host", host)
+		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
+		return
+	}
+
 	if !s.bot.Status().Connected {
 		slog.Debug("play refused, bot not connected", "url", in.URL)
 		writeErrorMessage(w, http.StatusConflict, lang, "bot_not_connected")
@@ -364,6 +370,17 @@ func (s *Server) allowedContentHosts() map[string]struct{} {
 	return hosts
 }
 
+func (s *Server) checkContentURL(rawURL string) (string, bool) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", false
+	}
+
+	host := parsed.Hostname()
+	_, ok := s.allowedContentHosts()[strings.ToLower(host)]
+	return host, ok
+}
+
 func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 	lang := languageFor(r)
 
@@ -374,14 +391,8 @@ func (s *Server) handleInstantContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		slog.Debug("content url rejected", "reason", "malformed", "url", rawURL)
-		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
-		return
-	}
-	if _, ok := s.allowedContentHosts()[strings.ToLower(parsed.Hostname())]; !ok {
-		slog.Debug("content url rejected", "reason", "host-not-allowed", "host", parsed.Hostname())
+	if host, ok := s.checkContentURL(rawURL); !ok {
+		slog.Debug("content url rejected", "reason", "host-not-allowed", "host", host)
 		writeErrorMessage(w, http.StatusBadRequest, lang, "invalid_url")
 		return
 	}

@@ -58,7 +58,8 @@ the Electron/React app in `../peace-breaker-bot-desktop`.
 - `pkg/provider`: one `Provider` per site. `List` returns sentinel errors that `server.go` maps to
   statuses; `InferPages` guesses the page count. Only `myinstants` uses `Region`. Site quirks live in
   each provider's package doc.
-- `/instants/{url}/content` enforces the providers' `AllowedContentHosts`; `/bot/play` doesn't.
+- `/instants/{url}/content` and `/bot/play` both enforce the providers' `AllowedContentHosts`; any other
+  host is `400 invalid_url`, so the bot never fetches an arbitrary URL.
 - Known gaps: `Bot.vc` isn't cleared on an external disconnect; following the owner answers
   `owner_unknown` after a restart until the owner speaks.
 

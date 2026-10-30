@@ -62,7 +62,7 @@ paths:
                   summary: Interrupted by POST /api/v1/bot/stop or a newer /api/v1/bot/play
                   value: { data: { exitReason: stop } }
         "400":
-          description: The body wasn't valid JSON, or `url` is missing/malformed.
+          description: The body wasn't valid JSON, or `url` is missing, malformed, or on a host none of the providers serve clips from.
           content:
             application/json:
               schema:

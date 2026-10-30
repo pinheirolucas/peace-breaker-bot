@@ -211,7 +211,7 @@ func unescapeJSString(s string) string {
 
 		next := s[i+1]
 		if next == 'u' && i+5 < len(s) {
-			if n, err := strconv.ParseUint(s[i+2:i+6], 16, 32); err == nil {
+			if n, err := strconv.ParseUint(s[i+2:i+6], 16, 16); err == nil {
 				b.WriteRune(rune(n))
 				i += 5
 				continue

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,11 +25,12 @@ import (
 )
 
 func serverAllowingHost(host string) *Server {
-	return &Server{
-		player:   instant.NewPlayer(),
-		bot:      connectedBot(),
-		registry: provider.Registry{"test": &fakeProvider{key: "test", hosts: []string{host}}},
-	}
+	return allowingHost(New(instant.NewPlayer(), connectedBot()), host)
+}
+
+func allowingHost(s *Server, host string) *Server {
+	s.registry = provider.Registry{"test": &fakeProvider{key: "test", hosts: []string{host}}}
+	return s
 }
 
 type fakeBot struct {
@@ -277,6 +279,29 @@ func TestHandleBotPlayRejectsAnInvalidURL(t *testing.T) {
 	}
 }
 
+func TestHandleBotPlayRejectsAHostNoProviderServes(t *testing.T) {
+	var hits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+	}))
+	t.Cleanup(upstream.Close)
+
+	s := serverAllowingHost("example.com")
+
+	rec := httptest.NewRecorder()
+	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+upstream.URL+`/a.mp3"}`)))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if got := decodeBody(t, rec)["label"]; got != "invalid_url" {
+		t.Errorf("label = %v, want invalid_url", got)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("upstream was contacted %d times, want 0", hits.Load())
+	}
+}
+
 func TestHandleBotPlayRejectsWhenTheBotHasNoVoiceConnection(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -289,7 +314,7 @@ func TestHandleBotPlayRejectsWhenTheBotHasNoVoiceConnection(t *testing.T) {
 
 	link := upstream.URL + "/does-not-exist.mp3"
 
-	s := New(instant.NewPlayer(), &fakeBot{status: bot.VoiceStatus{Connected: false}})
+	s := allowingHost(New(instant.NewPlayer(), &fakeBot{status: bot.VoiceStatus{Connected: false}}), "127.0.0.1")
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
@@ -314,7 +339,7 @@ func TestHandleBotPlayReportsANotFoundClipAs404(t *testing.T) {
 
 	link := upstream.URL + "/does-not-exist.mp3"
 
-	s := New(instant.NewPlayer(), connectedBot())
+	s := serverAllowingHost("127.0.0.1")
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
@@ -343,7 +368,7 @@ func TestHandleBotPlayReturnsOnlyOneResponseForUnsupportedAudio(t *testing.T) {
 
 	link := upstream.URL + "/a.mp3"
 
-	s := New(instant.NewPlayer(), connectedBot())
+	s := serverAllowingHost("127.0.0.1")
 
 	rec := httptest.NewRecorder()
 	s.handleBotPlay(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bot/play", strings.NewReader(`{"url":"`+link+`"}`)))
@@ -370,7 +395,7 @@ func TestHandleBotPlayReturnsTheExitReasonWhenPlaybackEnds(t *testing.T) {
 	seedCache(t, link)
 
 	player := instant.NewPlayer()
-	s := New(player, connectedBot())
+	s := allowingHost(New(player, connectedBot()), "example.com")
 
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
@@ -403,7 +428,7 @@ func TestHandleBotStopReleasesAnInFlightPlay(t *testing.T) {
 	seedCache(t, link)
 
 	player := instant.NewPlayer()
-	s := New(player, connectedBot())
+	s := allowingHost(New(player, connectedBot()), "example.com")
 
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
