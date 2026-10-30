@@ -1,6 +1,6 @@
 ARG VERSION=dev
 
-FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
