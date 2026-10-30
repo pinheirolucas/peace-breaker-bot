@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -22,7 +23,7 @@ func newCache(t *testing.T, h http.HandlerFunc) (*Cache, string) {
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 
-	return &Cache{Client: srv.Client(), Dir: t.TempDir()}, srv.URL
+	return &Cache{Client: srv.Client(), Dir: t.TempDir(), AllowedHosts: []string{"127.0.0.1"}}, srv.URL
 }
 
 func serveFile(t *testing.T, name string) http.HandlerFunc {
@@ -216,5 +217,35 @@ func TestGetTracesWhyADownloadWasRejected(t *testing.T) {
 				t.Errorf("log %q does not contain a rejection with %q", logs.String(), tc.want)
 			}
 		})
+	}
+}
+
+func TestGetRefusesAHostOutsideTheAllowlistWithoutContactingIt(t *testing.T) {
+	var hits atomic.Int32
+	c, base := newCache(t, func(w http.ResponseWriter, r *http.Request) { hits.Add(1) })
+	c.AllowedHosts = []string{"example.com"}
+
+	if _, err := c.Get(base + "/a.mp3"); !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("Get err = %v, want ErrHostNotAllowed", err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("upstream was contacted %d times, want 0", hits.Load())
+	}
+}
+
+func TestGetRefusesEverythingWhenNoHostIsAllowed(t *testing.T) {
+	c, base := newCache(t, func(w http.ResponseWriter, r *http.Request) {})
+	c.AllowedHosts = nil
+
+	if _, err := c.Get(base + "/a.mp3"); !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("Get err = %v, want ErrHostNotAllowed", err)
+	}
+}
+
+func TestGetRefusesANonHTTPScheme(t *testing.T) {
+	c, _ := newCache(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	if _, err := c.Get("file://127.0.0.1/etc/passwd"); !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("Get err = %v, want ErrHostNotAllowed", err)
 	}
 }

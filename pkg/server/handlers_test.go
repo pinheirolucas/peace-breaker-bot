@@ -158,7 +158,7 @@ func TestHandleInstantContentReportsAMissingClip(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	previous := fsutil.Default
-	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir(), AllowedHosts: []string{"127.0.0.1"}}
 	t.Cleanup(func() { fsutil.Default = previous })
 
 	link := upstream.URL + "/does-not-exist.mp3"
@@ -194,7 +194,7 @@ func TestHandleInstantContentReportsABadUpstreamStatus(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	previous := fsutil.Default
-	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir(), AllowedHosts: []string{"127.0.0.1"}}
 	t.Cleanup(func() { fsutil.Default = previous })
 
 	link := upstream.URL + "/a.mp3"
@@ -226,7 +226,7 @@ func TestHandleInstantContentRejectsNonMp3Content(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	previous := fsutil.Default
-	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir(), AllowedHosts: []string{"127.0.0.1"}}
 	t.Cleanup(func() { fsutil.Default = previous })
 
 	link := upstream.URL + "/a.mp3"
@@ -309,7 +309,7 @@ func TestHandleBotPlayRejectsWhenTheBotHasNoVoiceConnection(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	previous := fsutil.Default
-	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir(), AllowedHosts: []string{"127.0.0.1"}}
 	t.Cleanup(func() { fsutil.Default = previous })
 
 	link := upstream.URL + "/does-not-exist.mp3"
@@ -334,7 +334,7 @@ func TestHandleBotPlayReportsANotFoundClipAs404(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	previous := fsutil.Default
-	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir(), AllowedHosts: []string{"127.0.0.1"}}
 	t.Cleanup(func() { fsutil.Default = previous })
 
 	link := upstream.URL + "/does-not-exist.mp3"
@@ -363,7 +363,7 @@ func TestHandleBotPlayReturnsOnlyOneResponseForUnsupportedAudio(t *testing.T) {
 	t.Cleanup(upstream.Close)
 
 	previous := fsutil.Default
-	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir()}
+	fsutil.Default = &fsutil.Cache{Client: upstream.Client(), Dir: t.TempDir(), AllowedHosts: []string{"127.0.0.1"}}
 	t.Cleanup(func() { fsutil.Default = previous })
 
 	link := upstream.URL + "/a.mp3"
