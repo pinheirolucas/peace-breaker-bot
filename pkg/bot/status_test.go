@@ -10,6 +10,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	botgateway "github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/voice"
+	"github.com/disgoorg/godave"
 	"github.com/disgoorg/snowflake/v2"
 )
 
@@ -20,6 +21,7 @@ type fakeVoiceConn struct {
 
 func (f *fakeVoiceConn) Gateway() voice.Gateway { return nil }
 func (f *fakeVoiceConn) UDP() voice.UDPConn     { return nil }
+func (f *fakeVoiceConn) DAVE() godave.Session   { return nil }
 func (f *fakeVoiceConn) ChannelID() *snowflake.ID {
 	id := f.channelID
 	return &id

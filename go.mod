@@ -4,7 +4,8 @@ go 1.27.4
 
 require (
 	github.com/PuerkitoBio/goquery v1.13.0
-	github.com/disgoorg/disgo v0.19.6
+	github.com/disgoorg/disgo v0.20.0
+	github.com/disgoorg/godave v0.3.0
 	github.com/disgoorg/snowflake/v2 v2.0.3
 	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/libp2p/zeroconf/v2 v2.2.0
@@ -20,7 +21,6 @@ require (
 
 require (
 	github.com/andybalholm/cascadia v1.3.5 // indirect
-	github.com/disgoorg/godave v0.3.0 // indirect
 	github.com/disgoorg/json/v2 v2.0.0 // indirect
 	github.com/disgoorg/omit v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect

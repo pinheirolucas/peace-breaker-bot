@@ -101,8 +101,8 @@ func newFixture(t *testing.T) *fixture {
 
 	caches := newTestCaches()
 	caches.SetSelfUser(discord.OAuth2User{User: discord.User{ID: 345, Username: "peace-breaker"}})
-	caches.AddGuild(discord.Guild{ID: 1})
-	caches.AddGuild(discord.Guild{ID: 2})
+	caches.AddGuild(discord.CacheGuild{Guild: discord.Guild{ID: 1}})
+	caches.AddGuild(discord.CacheGuild{Guild: discord.Guild{ID: 2}})
 	caches.AddChannel(voiceChannel(t, 10, 1, 0, "General"))
 	caches.AddChannel(voiceChannel(t, 11, 1, 1, "instants"))
 	caches.AddChannel(stageChannel(t, 20, 2, 0, "Stage"))
