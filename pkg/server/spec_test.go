@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/i18n"
 	"github.com/pinheirolucas/peace-breaker-bot/pkg/instant"
